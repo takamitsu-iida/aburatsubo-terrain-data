@@ -49,6 +49,13 @@ python3 -m venv .venv
 direnv edit .
 ```
 
+エディタが開くので、以下の内容を追加して保存する。
+
+```text
+source .venv/bin/activate
+unset PS1
+```
+
 <br><br>
 
 ## 座標系メモ
