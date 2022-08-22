@@ -62,14 +62,13 @@ unset PS1
 
 <dl>
 <dt>latitude</dt> <dd>緯度</dd>
-<dt>longitude</dt> <dd>軽度</dd>
+<dt>longitude</dt> <dd>経度</dd>
 <dt>地球の半径</dt> <dd>6378.137 km 測地測量の基準としての半径</dd>
 </dl>
 
-
 <br><br>
 
-## データ処理
+## 参考文献（データ処理）
 
 [マーチングスクエア](https://urbanspr1nter.github.io/marchingsquares/){:target="_blank"}
 
@@ -78,6 +77,37 @@ unset PS1
 [Python で曲面近似（サーフェスフィッティング）する](https://chuckischarles.hatenablog.com/entry/2020/02/06/081238){:target="_blank"}
 
 [カーブフィッティング手法 scipy.optimize.curve_fit の使い方を理解する](https://qiita.com/maskot1977/items/e4f5f71200180865986e){:target="_blank"}
+
+<br><br>
+
+## メモ
+
+Go言語の方が書きやすいものの、データ加工、特に補完処理はPythonの方が楽なので考え直した。
+
+### データの初期化
+
+１巡目のパース処理
+
+- 座標の最大値、最小値を調べる
+- 座標の`最大値-最小値`を計算する
+- これを基に距離東西、南北の距離が割り出せる。
+- 1mのグリッドを想定したときの緯度方向、経度方向の単位を割り出す
+
+２巡目のパース処理
+
+- 1m(もしくは3m、もしくは5m)の単位でlat, lonを丸める
+- 重複するデータを排除したいので、辞書型に格納していく
+- (lat, lon)をキー、[depth]をバリューにする
+- (lat, lon)をキーとしてバリューを取り出す
+    - バリューがあれば、リストにdepthを追加する
+    - なければ新規に(lat, lon), [depth]を挿入する
+- 出来上がった辞書型に対して、全件を取り出す
+    - lat, lon, avg(depth)をファイルに書き出す
+
+ここまでの処理で、CSVファイルの件数は減る。
+
+
+
 
 <br><br>
 
