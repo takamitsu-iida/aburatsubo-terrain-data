@@ -170,34 +170,33 @@ if __name__ == '__main__':
             return None
 
     def print_summary(df: pd.DataFrame):
-        print("=" * 10 + "head" + "=" * 10)
-        print(df.head())
+        print("head")
+        print(df.head(3))
         print("")
-        print("=" * 10 + "tail" + "=" * 10)
-        print(df.tail())
+        print("tail")
+        print(df.tail(3))
         print("")
-        print("=" * 10 + "describe" + "=" * 10)
-        print(df.describe())
+        print("describe")
+        print(df.describe().to_markdown())  # to_markdown() requires tabulate module
         print("")
+
 
     def process_duplicated(df: pd.DataFrame):
         dfx = df[["lat", "lon", "depth"]]
 
-        dfx_dropped = df.drop_duplicates(subset=["lat", "lon"], keep=False)
-        print("number of uniq coordinate: {}".format(len(dfx_dropped)))
-        print("")
-        print(dfx_dropped.describe())
+        dfx_uniq = df.drop_duplicates(subset=["lat", "lon"], keep=False)
+        print("unique coordinate")
+        print(dfx_uniq.describe().to_markdown())
         print("")
 
         dfx_duplicated = dfx.groupby(["lat", "lon"])["depth"].mean().reset_index()
-        print("number of duplicated coordinate: {}".format(len(dfx_duplicated)))
-        print("")
-        print(dfx_duplicated.describe())
+        print("uplicated coordinate")
+        print(dfx_duplicated.describe().to_markdown())
         print("")
 
-        df = pd.concat([dfx_dropped, dfx_duplicated]).reset_index(drop=True)
-        print("new df")
-        print(df.describe())
+        df = pd.concat([dfx_uniq, dfx_duplicated]).reset_index(drop=True)
+        print("combilned data frame")
+        print(df.describe().to_markdown())
         print("")
 
         return df
