@@ -19,7 +19,7 @@ https://maps.fishdeeper.com/ja-jp
 ```
 
 緯度(lat)の分解能は小数点以下6桁。経度(lon)の分解能は小数点以下5桁。
-概ね1m程度の分解能になっているものと思われる。
+概ね1m程度の分解能になっている。
 
 1行目のUNIX時間1659737621643は2022年8月6日7時13分41.643秒を表している。
 2行目のUNIX時間との差は約2秒。
@@ -68,6 +68,23 @@ CSVから読み取った状態での散布図。左上に異常値が存在す�
 ![drop outlier](https://takamitsu-iida.github.io/aburatsubo-terrain-data/img/scatter_04.png)
 
 
+重複を削除、異常値を削除した状態でのdescribe()はこの通り。
+11万件まで減った。
+
+|       |             lat |             lon |        depth |
+|:------|----------------:|----------------:|-------------:|
+| count | 119236          | 119236          | 119236       |
+| mean  |     35.1635     |    139.608      |     16.0729  |
+| std   |      0.00170909 |      0.00404937 |      9.18661 |
+| min   |     35.1572     |    139.599      |      1.426   |
+| 25%   |     35.1625     |    139.604      |      8.117   |
+| 50%   |     35.1637     |    139.608      |     15.032   |
+| 75%   |     35.1644     |    139.61       |     21.33    |
+| max   |     35.171      |    139.622      |     45.862   |
+
+
+
+
 
 <br><br>
 
@@ -96,6 +113,8 @@ unset PS1
 
 ## 座標系メモ
 
+latとlon、どっちが緯度でどっちが経度かすぐにわからなくなる。
+
 <dl>
 <dt>latitude</dt> <dd>緯度</dd>
 <dt>longitude</dt> <dd>経度</dd>
@@ -116,31 +135,58 @@ unset PS1
 
 <br><br>
 
-## メモ
+## 実装メモ
 
-Go言語の方が書きやすいものの、データ加工、特に補完処理はPythonの方が楽なので考え直した。
+Go言語の方が書きやすいものの、データ加工処理の容易さを考慮してPythonで処理。
 
-### データの初期化
+<br><br>
 
-１巡目のパース処理
+### 重複削除のやり方
 
-- 座標の最大値、最小値を調べる
-- 座標の`最大値-最小値`を計算する
-- これを基に距離東西、南北の距離が割り出せる。
-- 1mのグリッドを想定したときの緯度方向、経度方向の単位を割り出す
+groupbyで集約しつつ、水深の平均を計算する。
 
-２巡目のパース処理
+元データから重複行をすべて削除し、groupbyで計算したものを加える。
 
-- 1m(もしくは3m、もしくは5m)の単位でlat, lonを丸める
-- 重複するデータを排除したいので、辞書型に格納していく
-- (lat, lon)をキー、[depth]をバリューにする
-- (lat, lon)をキーとしてバリューを取り出す
-    - バリューがあれば、リストにdepthを追加する
-    - なければ新規に(lat, lon), [depth]を挿入する
-- 出来上がった辞書型に対して、全件を取り出す
-    - lat, lon, avg(depth)をファイルに書き出す
+```python
+    def process_duplicated(df: pd.DataFrame):
+        dfx = df[["lat", "lon", "depth"]]
+        dfx_uniq = df.drop_duplicates(subset=["lat", "lon"], keep=False)
+        dfx_duplicated = dfx.groupby(["lat", "lon"])["depth"].mean().reset_index()
+        df = pd.concat([dfx_uniq, dfx_duplicated]).reset_index(drop=True)
+        return df
+```
 
-ここまでの処理で、CSVファイルの件数は減る。
+### 外れ値検出
+
+Local Outlier Factorを利用する。
+
+```python
+from sklearn.neighbors import LocalOutlierFactor  # process_outlier()
+```
+
+```python
+        def local_outlier_factor(n_neighbors=20):
+            lof = LocalOutlierFactor(n_neighbors=n_neighbors)
+            X = df[["lat", "lon"]]
+            lof.fit(X)
+            predicted = lof.fit_predict(X)
+            return predicted
+```
+
+predictedは外れ値なら-1、正常値なら1が格納されたアレイ。
+
+```python
+        # 外れ値を除く処理を施す
+        pred = process_outlier(df)
+
+        # 外れ値のみのデータ
+        outlier = df.iloc[np.where(pred < 0)]
+
+        # dfを外れ値データを除いたデータに置き換える
+        df = df.iloc[np.where(pred > 0)]
+```
+
+
 
 ### データ補間の考え方
 

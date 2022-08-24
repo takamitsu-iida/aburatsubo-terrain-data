@@ -204,7 +204,6 @@ if __name__ == '__main__':
     def process_outlier(df: pd.DataFrame):
 
         def local_outlier_factor(n_neighbors=20):
-            # これでいいのかわからん、外れ値が多すぎる気がする
             lof = LocalOutlierFactor(n_neighbors=n_neighbors)
             X = df[["lat", "lon"]]
             lof.fit(X)
