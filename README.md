@@ -49,10 +49,23 @@ pandasで読み取った統計値。
 | 75%   |     35.1645     |    139.609      |     25.71    |
 | max   |     35.1797     |    139.622      |     46.984   |
 
+CSVから読み取った状態での散布図。左上に異常値が存在する。
+
+![original data](https://takamitsu-iida.github.io/aburatsubo-terrain-data/img/scatter_01.png)
+
 重複した座標も多くあり、pandasで分析すると75,402件が重複している。
+重複した部分はgroupbyで集約して水深の平均値を算出し、重複行を削除したあと、集約したものを加えている。
 
+![drop duplicated](https://takamitsu-iida.github.io/aburatsubo-terrain-data/img/scatter_02.png)
 
+異常値として検出されたデータ。
+1,039件と思いのほか多くのデータが異常値として弾かれた。
 
+![outlier data](https://takamitsu-iida.github.io/aburatsubo-terrain-data/img/scatter_03.png)
+
+異常値を除いたデータ。
+
+![drop outlier](https://takamitsu-iida.github.io/aburatsubo-terrain-data/img/scatter_04.png)
 
 
 
