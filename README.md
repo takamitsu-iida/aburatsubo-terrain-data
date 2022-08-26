@@ -36,7 +36,12 @@ CSVファイルの最後の3行
 古いデータはUNIX時間が欠落していて0になっている。
 概ね2017年よりも古いデータはUNIX時間が欠落している模様。
 
-pandasで読み取った統計値。
+緯度方向の分解能も低くなっている。これは初代Deeperと現行機種との差かも。
+
+古いデータはdropしてもいいけど、今回はそのまま利用する。
+
+
+CSVファイルをpandasで読み取った時点での統計値。
 
 |       |             lat |             lon |        depth |
 |:------|----------------:|----------------:|-------------:|
@@ -67,7 +72,6 @@ CSVから読み取った状態での散布図。左上に異常値が存在す�
 
 ![drop outlier](https://takamitsu-iida.github.io/aburatsubo-terrain-data/img/scatter_04.png)
 
-
 重複を削除、異常値を削除した状態でのdescribe()はこの通り。
 11万件まで減った。
 
@@ -81,8 +85,6 @@ CSVから読み取った状態での散布図。左上に異常値が存在す�
 | 50%   |     35.1637     |    139.608      |     15.032   |
 | 75%   |     35.1644     |    139.61       |     21.33    |
 | max   |     35.171      |    139.622      |     45.862   |
-
-
 
 
 
@@ -125,13 +127,16 @@ latとlon、どっちが緯度でどっちが経度かすぐにわからなく�
 
 ## 参考文献（データ処理）
 
-[マーチングスクエア](https://urbanspr1nter.github.io/marchingsquares/){:target="_blank"}
+[マーチングスクエア](https://urbanspr1nter.github.io/marchingsquares/)
 
-[マーチングキューブ](https://tatsy.github.io/programming-for-beginners/cpp/march-cubes/){:target="_blank"}
+[マーチングキューブ](https://tatsy.github.io/programming-for-beginners/cpp/march-cubes/)
 
-[Python で曲面近似（サーフェスフィッティング）する](https://chuckischarles.hatenablog.com/entry/2020/02/06/081238){:target="_blank"}
+[Python で曲面近似（サーフェスフィッティング）する](https://chuckischarles.hatenablog.com/entry/2020/02/06/081238)
 
-[カーブフィッティング手法 scipy.optimize.curve_fit の使い方を理解する](https://qiita.com/maskot1977/items/e4f5f71200180865986e){:target="_blank"}
+[カーブフィッティング手法 scipy.optimize.curve_fit の使い方を理解する](https://qiita.com/maskot1977/items/e4f5f71200180865986e)
+
+
+[The Nature of Geographic Information](https://www.e-education.psu.edu/natureofgeoinfo/c7_p9.html)
 
 <br><br>
 

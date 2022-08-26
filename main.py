@@ -11,6 +11,7 @@ __date__ = "2022/08/19"
 #
 # 標準ライブラリのインポート
 #
+import io
 import logging
 import math
 import os
@@ -98,6 +99,8 @@ try:
     import numpy as np
     import pandas as pd
     import matplotlib.pyplot as plt
+    from mpl_toolkits.mplot3d import Axes3D
+    from scipy.interpolate import RBFInterpolator
     from sklearn.neighbors import LocalOutlierFactor  # process_outlier()
     from sklearn.ensemble import IsolationForest  # process_outlier()
 except ImportError as e:
@@ -120,24 +123,43 @@ FIG_SIZE = (9, 6)
 
 class Stats:
     def __init__(self, df: pd.DataFrame) -> None:
+        self.mean_lat = df["lat"].mean()
         self.min_lat = df["lat"].min()
         self.max_lat = df["lat"].max()
         self.min_lon = df["lon"].min()
         self.max_lon = df["lon"].max()
-        self.max_depth = df["depth"].max()
+        #self.min_depth = df["depth"].min()
+        #self.max_depth = df["depth"].max()
+
+        # この場所で地球を水平(holizontal)に輪切りにしたときの半径(m)と円の長さ
+        h_r = EARTH_RADIUS * 1000 * math.cos(degree2radian(self.mean_lat))
+        h_circle = 2 * math.pi * h_r
+
+        # この円において弧の長さが1mになる角度、つまり経度の差
+        self.lon_unit = 360 / h_circle
+
+        # 地球を北極から南極に縦に輪切りにしたときの円周(m)
+        v_circle = 2 * math.pi * EARTH_RADIUS * 1000
+
+        # この円において弧の長さが1mになる角度、つまり経度の差
+        self.lat_unit = 360 / v_circle
 
         # 南北方向の距離(m)
         self.distance_south_north = 2 * math.pi * EARTH_RADIUS * 1000 * (self.max_lat - self.min_lat) / 360
         self.distance_south_north = math.floor(self.distance_south_north)
 
         # 東西方向の距離(m)
-        radius = EARTH_RADIUS * 1000 * math.cos(degree2radian(self.min_lat))
-        self.distance_west_east = 2 * math.pi * radius * (self.max_lon - self.min_lon) / 360
+        self.distance_west_east = h_circle * (self.max_lon - self.min_lon) / 360
         self.distance_west_east = math.floor(self.distance_west_east)
 
-        # グリッド単位
-        self.grid_lon = (self.max_lon - self.min_lon) / (self.distance_west_east / GRID_UNIT)
-        self.grid_lat = (self.max_lat - self.min_lat) / (self.distance_south_north / GRID_UNIT)
+    def __str__(self) -> str:
+        with io.StringIO() as s:
+            print("lat unit: {}".format(self.lat_unit), file=s)
+            print("lon unit: {}".format(self.lon_unit), file=s)
+            print("south-north distance (m): {}".format(self.distance_south_north), file=s)
+            print("west-east distance (m): {}".format(self.distance_west_east), file=s)
+            print("", file=s)
+            return s.getvalue()
 
 
 def degree2radian(degree: float) -> float:
@@ -150,6 +172,93 @@ def round_unit(x: float, unit: float) -> float:
 
 
 if __name__ == '__main__':
+
+    def rbf_example():
+        from scipy.stats.qmc import Halton
+        rng = np.random.default_rng()
+        xobs = 2*Halton(2, seed=rng).random(100) - 1
+        yobs = np.sum(xobs, axis=1)*np.exp(-6*np.sum(xobs**2, axis=1))
+        xgrid = np.mgrid[-1:1:50j, -1:1:50j]
+        xflat = xgrid.reshape(2, -1).T
+
+        print(xgrid)
+
+        yflat = RBFInterpolator(xobs, yobs)(xflat)
+
+        ygrid = yflat.reshape(50, 50)
+        fig, ax = plt.subplots()
+        ax.pcolormesh(*xgrid, ygrid, vmin=-0.25, vmax=0.25, shading='gouraud')
+        p = ax.scatter(*xobs.T, c=yobs, s=50, ec='k', vmin=-0.25, vmax=0.25)
+        fig.colorbar(p)
+        plt.savefig("3d.png")
+
+
+    def generate_test_grid(df:pd.DataFrame):
+        # テスト用座標
+        TEST_COORD_NW = (35.1636, 139.6082)
+        TEST_COORD_SE = (35.1622, 139.6099)
+
+        extracted = df.query("lat > {} and lat < {} and lon > {} and lon < {}".format(TEST_COORD_SE[0], TEST_COORD_NW[0], TEST_COORD_NW[1], TEST_COORD_SE[1]))
+        lat = extracted["lat"]
+        lat = (lat - lat.mean())/lat.std()
+        lon = extracted["lon"]
+        lon = (lon - lon.mean())/lon.std()
+        depth = extracted["depth"]
+        lat_lon = np.stack([lat, lon], -1)
+        rbf = RBFInterpolator(lat_lon, depth, kernel='thin_plate_spline', epsilon=2.0, neighbors=10)
+
+
+        # RBF補間を作成
+        # https://docs.scipy.org/doc/scipy/reference/generated/scipy.interpolate.RBFInterpolator.html#scipy.interpolate.RBFInterpolator
+        # rbf = RBFInterpolator(extracted[["lat", "lon"]], extracted["depth"], kernel='gaussian', epsilon=1.0, neighbors=1000)
+
+        """
+        linear : -r
+        thin_plate_spline : r**2 * log(r)
+        cubic : r**3
+        quintic : -r**5
+        multiquadric : -sqrt(1 + r**2)
+        inverse_multiquadric : 1/sqrt(1 + r**2)
+        inverse_quadratic : 1/(1 + r**2)
+        gaussian : exp(-r**2)
+
+        Default is 'thin_plate_spline'
+        """
+
+        # x, yの各軸に関して、等間隔の配列を作成する
+        xi = np.linspace(lon.min(), lon.max(), 100)
+        yi = np.linspace(lat.min(), lat.max(), 100)
+
+        # メッシュグリッドに変換する
+        xi, yi = np.meshgrid(xi, yi)
+        xi_yi = np.stack([xi.ravel(), yi.ravel()], -1)
+
+        # xi, yi の位置の zi を計算する
+        zi = rbf(xi_yi)
+
+        #==============================================================================
+        # 3 次元グラフ
+        #==============================================================================
+        fig = plt.figure(figsize=(18, 7), dpi=200) # 画像を作成する
+        el = 55                                    # 視点高さを設定する
+
+        ax = fig.add_subplot(231, projection='3d') # 2 × 3 の 1 枚目に描画する
+
+        # 曲面のプロット
+        ax.plot_surface(xi, yi, zi)                      # サーフェスの描画
+        ax.view_init(elev=el, azim=10)                   # ビューの設定
+        ax.set_title('elev = ' + str(el) + ', deg = 10') # タイトルの設定
+        ax.set_xlabel('xi')                              # 軸ラベルの設定
+        ax.set_ylabel('yi')                              # 軸ラベルの設定
+        ax.set_zlabel('zi')                              # 軸ラベルの設定
+
+        plt.savefig("3d.png")
+
+
+
+
+
+
 
     def read_file(filename, callback):
         try:
@@ -181,6 +290,16 @@ if __name__ == '__main__':
         print("")
 
 
+    def save_scatter(df: pd.DataFrame, title="", filename="") -> None:
+        if not filename:
+            return
+        df_plt = df.plot.scatter(x="lon", y="lat", title=title, grid=True, figsize=FIG_SIZE, s=0.5)
+        df_plt.set_xlabel("lon")
+        df_plt.set_ylabel("lat")
+        plt.savefig(os.path.join(img_dir, filename))
+        plt.clf()
+
+
     def process_duplicated(df: pd.DataFrame):
         dfx = df[["lat", "lon", "depth"]]
 
@@ -190,12 +309,12 @@ if __name__ == '__main__':
         print("")
 
         dfx_duplicated = dfx.groupby(["lat", "lon"])["depth"].mean().reset_index()
-        print("uplicated coordinate")
+        print("duplicated coordinate")
         print(dfx_duplicated.describe().to_markdown())
         print("")
 
         df = pd.concat([dfx_uniq, dfx_duplicated]).reset_index(drop=True)
-        print("combilned data frame")
+        print("combined data frame")
         print(df.describe().to_markdown())
         print("")
 
@@ -225,17 +344,23 @@ if __name__ == '__main__':
         # return isolation_forest()
         return local_outlier_factor()
 
-    def norm_coord(df: pd.DataFrame):
-        # 全行をforで取り出すので処理が重い
-        for _, row in df.iterrows():
-            row["lat"] = row["lat"] - 35.0
-            row["lon"] = row["lon"] - 139.0
+    def align_coord(df: pd.DataFrame) -> pd.DataFrame:
+        # 1メートルの間隔で各座標を吸着させる
+        stats = Stats(df)
+        lat_unit = stats.lat_unit
+        lon_unit = stats.lon_unit
+
+        f_lat = lambda x: round(x / lat_unit) * lat_unit
+        f_lon = lambda x: round(x / lon_unit) * lon_unit
+
+        df["lat"] = df["lat"].map(f_lat)
+        df["lon"] = df["lon"].map(f_lon)
 
         return df
 
+
     def main():
         """メイン関数
-
         Returns:
         int -- 正常終了は0、異常時はそれ以外を返却
         """
@@ -247,64 +372,38 @@ if __name__ == '__main__':
         # CSVファイルには列名がないので、データフレームに列名を定義
         df.columns = ["lat", "lon", "depth", "time"]
 
-        # 時刻の列はいらない
-        df = df[["lat", "lon", "depth"]]
+        # 時刻の列は不要なので削除する
+        del df["time"]
 
         # データのサマリを表示
+        print("original data")
         print_summary(df)
 
         # オリジナルデータの散布図を保存
-        df_plt = df.plot.scatter(x="lon", y="lat", title="original data", grid=True, figsize=FIG_SIZE)
-        df_plt.set_xlabel("lon")
-        df_plt.set_ylabel("lat")
-        plt.savefig(os.path.join(img_dir, "scatter_01.png"))
-        plt.clf()
+        save_scatter(df, title="original data", filename="scatter_01.png")
+
+        # 座標を1m単位に吸着させる
+        df = align_coord(df)
+        print("align coord")
+        print(df.describe().to_markdown())
+        print("")
 
         # 重複した座標のデータを削除する
         df = process_duplicated(df)
 
-        # 重複を削除した散布図を保存
-        df_plt = df.plot.scatter(x="lon", y="lat", title="drop duplicated", grid=True, figsize=FIG_SIZE)
-        df_plt.set_xlabel("lon")
-        df_plt.set_ylabel("lat")
-        plt.savefig(os.path.join(img_dir, "scatter_02.png"))
-        plt.clf()
+        # 重複を削除した状態の散布図を保存
+        save_scatter(df, title="drop duplicated", filename="scatter_02.png")
 
         # 外れ値を除く処理を施す
         pred = process_outlier(df)
 
         # 外れ値データの散布図を保存
         outlier = df.iloc[np.where(pred < 0)]
-        print("外れ値")
-        print_summary(outlier)
-
-        df_plt = outlier.plot.scatter(x="lon", y="lat", title="outlier", grid=True, figsize=FIG_SIZE)
-        df_plt.set_xlabel("lon")
-        df_plt.set_ylabel("lat")
-        plt.savefig(os.path.join(img_dir, "scatter_03.png"))
-        plt.clf()
+        save_scatter(outlier, title="outlier", filename="scatter_03.png")
 
         # dfを外れ値データを除いたデータに置き換える
         df = df.iloc[np.where(pred > 0)]
-        print("外れ値を除外")
-        print_summary(df)
-
-        # 外れ値データを除いた散布図を保存
-        df_plt = df.plot.scatter(x="lon", y="lat", title="drop outlier", grid=True, figsize=FIG_SIZE)
-        df_plt.set_xlabel("lon")
-        df_plt.set_ylabel("lat")
-        plt.savefig(os.path.join(img_dir, "scatter_04.png"))
-        plt.clf()
-
-        # 統計量から東西距離、南北距離を割り出す
-        stats = Stats(df)
-        print("south-north distance (m): {}".format(stats.distance_south_north))
-        print("west-east distance (m): {}".format(stats.distance_west_east))
-        print("")
-
-        # 座標を正規化する
-        #df = norm_coord(df)
-        # print_summary(df)
+        save_scatter(df, title="drop outlier", filename="scatter_04.png")
 
         return 0
 
