@@ -176,8 +176,8 @@ if __name__ == '__main__':
     def rbf_example():
         from scipy.stats.qmc import Halton
         rng = np.random.default_rng()
-        xobs = 2*Halton(2, seed=rng).random(100) - 1
-        yobs = np.sum(xobs, axis=1)*np.exp(-6*np.sum(xobs**2, axis=1))
+        xobs = 2 * Halton(2, seed=rng).random(100) - 1
+        yobs = np.sum(xobs, axis=1) * np.exp(-6 * np.sum(xobs**2, axis=1))
         xgrid = np.mgrid[-1:1:50j, -1:1:50j]
         xflat = xgrid.reshape(2, -1).T
 
@@ -192,21 +192,19 @@ if __name__ == '__main__':
         fig.colorbar(p)
         plt.savefig("3d.png")
 
-
-    def generate_test_grid(df:pd.DataFrame):
+    def generate_test_grid(df: pd.DataFrame):
         # テスト用座標
         TEST_COORD_NW = (35.1636, 139.6082)
         TEST_COORD_SE = (35.1622, 139.6099)
 
         extracted = df.query("lat > {} and lat < {} and lon > {} and lon < {}".format(TEST_COORD_SE[0], TEST_COORD_NW[0], TEST_COORD_NW[1], TEST_COORD_SE[1]))
         lat = extracted["lat"]
-        lat = (lat - lat.mean())/lat.std()
+        lat = (lat - lat.mean()) / lat.std()
         lon = extracted["lon"]
-        lon = (lon - lon.mean())/lon.std()
+        lon = (lon - lon.mean()) / lon.std()
         depth = extracted["depth"]
         lat_lon = np.stack([lat, lon], -1)
         rbf = RBFInterpolator(lat_lon, depth, kernel='thin_plate_spline', epsilon=2.0, neighbors=10)
-
 
         # RBF補間を作成
         # https://docs.scipy.org/doc/scipy/reference/generated/scipy.interpolate.RBFInterpolator.html#scipy.interpolate.RBFInterpolator
@@ -236,29 +234,23 @@ if __name__ == '__main__':
         # xi, yi の位置の zi を計算する
         zi = rbf(xi_yi)
 
-        #==============================================================================
+        # ==============================================================================
         # 3 次元グラフ
-        #==============================================================================
-        fig = plt.figure(figsize=(18, 7), dpi=200) # 画像を作成する
+        # ==============================================================================
+        fig = plt.figure(figsize=(18, 7), dpi=200)  # 画像を作成する
         el = 55                                    # 視点高さを設定する
 
-        ax = fig.add_subplot(231, projection='3d') # 2 × 3 の 1 枚目に描画する
+        ax = fig.add_subplot(231, projection='3d')  # 2 × 3 の 1 枚目に描画する
 
         # 曲面のプロット
         ax.plot_surface(xi, yi, zi)                      # サーフェスの描画
         ax.view_init(elev=el, azim=10)                   # ビューの設定
-        ax.set_title('elev = ' + str(el) + ', deg = 10') # タイトルの設定
+        ax.set_title('elev = ' + str(el) + ', deg = 10')  # タイトルの設定
         ax.set_xlabel('xi')                              # 軸ラベルの設定
         ax.set_ylabel('yi')                              # 軸ラベルの設定
         ax.set_zlabel('zi')                              # 軸ラベルの設定
 
         plt.savefig("3d.png")
-
-
-
-
-
-
 
     def read_file(filename, callback):
         try:
@@ -289,7 +281,6 @@ if __name__ == '__main__':
         print(df.describe().to_markdown())  # to_markdown() requires tabulate module
         print("")
 
-
     def save_scatter(df: pd.DataFrame, title="", filename="") -> None:
         if not filename:
             return
@@ -299,10 +290,10 @@ if __name__ == '__main__':
         plt.savefig(os.path.join(img_dir, filename))
         plt.clf()
 
-
     def process_duplicated(df: pd.DataFrame):
         dfx = df[["lat", "lon", "depth"]]
 
+        # keep=Falseにすると重複行は全て削除。デフォルトはkeep='first'
         dfx_uniq = df.drop_duplicates(subset=["lat", "lon"], keep=False)
         print("unique coordinate")
         print(dfx_uniq.describe().to_markdown())
@@ -344,20 +335,18 @@ if __name__ == '__main__':
         # return isolation_forest()
         return local_outlier_factor()
 
-    def align_coord(df: pd.DataFrame) -> pd.DataFrame:
+    def align_coord(df: pd.DataFrame, stats: Stats) -> pd.DataFrame:
         # 1メートルの間隔で各座標を吸着させる
-        stats = Stats(df)
         lat_unit = stats.lat_unit
         lon_unit = stats.lon_unit
 
-        f_lat = lambda x: round(x / lat_unit) * lat_unit
-        f_lon = lambda x: round(x / lon_unit) * lon_unit
+        def f_lat(x): return round(x / lat_unit) * lat_unit
+        def f_lon(x): return round(x / lon_unit) * lon_unit
 
         df["lat"] = df["lat"].map(f_lat)
         df["lon"] = df["lon"].map(f_lon)
 
         return df
-
 
     def main():
         """メイン関数
@@ -383,7 +372,8 @@ if __name__ == '__main__':
         save_scatter(df, title="original data", filename="scatter_01.png")
 
         # 座標を1m単位に吸着させる
-        df = align_coord(df)
+        stats = Stats(df)
+        df = align_coord(df, stats)
         print("align coord")
         print(df.describe().to_markdown())
         print("")
@@ -404,6 +394,9 @@ if __name__ == '__main__':
         # dfを外れ値データを除いたデータに置き換える
         df = df.iloc[np.where(pred > 0)]
         save_scatter(df, title="drop outlier", filename="scatter_04.png")
+
+        df.to_csv(os.path.join(data_dir, "data.csv"), index=False)
+
 
         return 0
 
