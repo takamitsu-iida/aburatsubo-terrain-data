@@ -395,6 +395,9 @@ if __name__ == '__main__':
         df = df.iloc[np.where(pred > 0)]
         save_scatter(df, title="drop outlier", filename="scatter_04.png")
 
+        # CSVファイルに保存、ファイル名はdata.csvで固定
+        # 外部からみたこのファイルのURLはこれ
+        # https://takamitsu-iida.github.io/aburatsubo-terrain-data/data/data.csv
         df.to_csv(os.path.join(data_dir, "data.csv"), index=False)
 
 
