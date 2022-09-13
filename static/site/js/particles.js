@@ -1,5 +1,10 @@
-import * as THREE from "../../build/three.module.js";
-import { OrbitControls } from "./controls/OrbitControls.js";
+// from local
+// import * as THREE from "../../build/three.module.js";
+// import { OrbitControls } from "./controls/OrbitControls.js";
+
+// from CDN
+import * as THREE from 'three';
+import {OrbitControls} from 'https://unpkg.com/three@0.142.0/examples/jsm/controls/OrbitControls.js';
 
 // サイズ
 const sizes = {
