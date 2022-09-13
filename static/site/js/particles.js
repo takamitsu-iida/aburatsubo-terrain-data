@@ -32,7 +32,7 @@ document.body.appendChild(renderer.domElement);
 
 // テクスチャ設定
 const textureLoader = new THREE.TextureLoader();
-const particlesTexture = textureLoader.load("/static/site/img/particle.png")
+const particlesTexture = textureLoader.load("./site/img/particle.png")
 
 //
 // グリッドヘルパー
