@@ -5,6 +5,7 @@
 // from CDN
 import * as THREE from 'three';
 import {OrbitControls} from 'https://unpkg.com/three@0.142.0/examples/jsm/controls/OrbitControls.js';
+import GUI from "https://cdn.jsdelivr.net/npm/lil-gui@0.15/+esm";
 
 // サイズ
 const sizes = {
@@ -93,8 +94,6 @@ scene.add(particles)
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true;
 
-window.addEventListener("resize", onWindowResize);
-
 // const clock = new THREE.Clock();
 
 function animate() {
@@ -113,7 +112,11 @@ function animate() {
 function onWindowResize() {
   renderer.setSize(sizes.width, sizes.height);
   camera.aspect = sizes.width / sizes.height;
-  camera.updateProjectionMatrix();
+  camera.updateProjectionMatrix();  // アスペクト比を変えたときには必ず呼ぶ
 }
 
-animate();
+function init() {
+  window.addEventListener("resize", onWindowResize);
+  animate();
+}
+window.addEventListener("load", init);
