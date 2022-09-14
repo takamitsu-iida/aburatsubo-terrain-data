@@ -44,19 +44,3 @@ main p {
   line-height: 35px;
   font-weight: 500;
 }
-
-main button {
-  padding: 1.5rem 3rem;
-  background: transparent;
-  border: 1px solid #aaa;
-  color: #f0f5f2;
-  font-size: 1.4rem;
-  cursor: pointer;
-  transition: all 0.5s;
-}
-
-main button:hover {
-  background: #f0f5f2;
-  color: #494646;
-  border: 1px solid #494646;
-}

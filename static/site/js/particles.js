@@ -4,8 +4,8 @@
 
 // from CDN
 import * as THREE from 'three';
-import {OrbitControls} from 'https://unpkg.com/three@0.142.0/examples/jsm/controls/OrbitControls.js';
-import GUI from "https://cdn.jsdelivr.net/npm/lil-gui@0.15/+esm";
+import { OrbitControls } from 'https://unpkg.com/three@0.142.0/examples/jsm/controls/OrbitControls.js';
+// import GUI from "https://cdn.jsdelivr.net/npm/lil-gui@0.15/+esm";
 
 // サイズ
 const sizes = {
@@ -13,10 +13,17 @@ const sizes = {
   height: window.innerHeight,
 };
 
+// DOMエレメント
+const canvas = document.querySelector(".webgl");
+
 // シーン
 const scene = new THREE.Scene();
 
-//カメラ
+// テクスチャ設定
+const textureLoader = new THREE.TextureLoader();
+const particlesTexture = textureLoader.load("./site/img/particle.png")
+
+// カメラ
 const camera = new THREE.PerspectiveCamera(
   100,
   sizes.width / sizes.height,
@@ -24,16 +31,18 @@ const camera = new THREE.PerspectiveCamera(
   100
 );
 camera.position.set(1, 1, 2);
+scene.add(camera);
+
+// マウス操作のためのOrbitControls
+const controls = new OrbitControls(camera, canvas);
+controls.enableDamping = true;
 
 // レンダラー
-const renderer = new THREE.WebGLRenderer();
+const renderer = new THREE.WebGLRenderer({
+  "canvas": canvas,
+});
 renderer.setSize(sizes.width, sizes.height);
-renderer.setPixelRatio(window.devicePixelRatio);
-document.body.appendChild(renderer.domElement);
-
-// テクスチャ設定
-const textureLoader = new THREE.TextureLoader();
-const particlesTexture = textureLoader.load("./site/img/particle.png")
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 
 //
 // グリッドヘルパー
@@ -84,20 +93,18 @@ const pointMaterial = new THREE.PointsMaterial({
 // pointMaterial.color.set("green");
 
 // メッシュ化（ジオメトリ＋マテリアル）
-// Pointsはパーティクル専用のメッシュ化
+// Pointsはパーティクル専用のメッシュ
 const particles = new THREE.Points(particlesGeometry, pointMaterial)
-
 scene.add(particles)
 
+//
+// アニメーション
+//
 
-// マウス操作
-const controls = new OrbitControls(camera, renderer.domElement);
-controls.enableDamping = true;
-
-// const clock = new THREE.Clock();
+const clock = new THREE.Clock();
 
 function animate() {
-  // const elapsedTime = clock.getElapsedTime();
+  const elapsedTime = clock.getElapsedTime();
 
   controls.update();
 
@@ -108,15 +115,25 @@ function animate() {
   requestAnimationFrame(animate);
 }
 
+//
 // ブラウザのリサイズ
+//
 function onWindowResize() {
-  renderer.setSize(sizes.width, sizes.height);
+  sizes.width = window.innerWidth;
+  sizes.height = window.innerHeight;
+
   camera.aspect = sizes.width / sizes.height;
   camera.updateProjectionMatrix();  // アスペクト比を変えたときには必ず呼ぶ
-}
 
+  renderer.setSize(sizes.width, sizes.height);
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+}
+window.addEventListener("resize", onWindowResize);
+
+//
+// 初期化
+//
 function init() {
-  window.addEventListener("resize", onWindowResize);
   animate();
 }
 window.addEventListener("load", init);
