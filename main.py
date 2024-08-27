@@ -355,7 +355,9 @@ if __name__ == '__main__':
         """
 
         # オリジナルデータをファイルから読む
-        file_path = os.path.join(data_dir, "bathymetry_data.csv")
+        filename = "bathymetry_data.csv"
+        filename = "ALL_depth_map_data_202408.csv"
+        file_path = os.path.join(data_dir, filename)
         df = load_csv(file_path)
 
         # CSVファイルには列名がないので、データフレームに列名を定義
