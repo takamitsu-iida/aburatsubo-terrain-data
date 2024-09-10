@@ -99,10 +99,14 @@ try:
     import numpy as np
     import pandas as pd
     import matplotlib.pyplot as plt
-    from mpl_toolkits.mplot3d import Axes3D
+    # from mpl_toolkits.mplot3d import Axes3D
     from scipy.interpolate import RBFInterpolator
     from sklearn.neighbors import LocalOutlierFactor  # process_outlier()
     from sklearn.ensemble import IsolationForest  # process_outlier()
+
+    # open3d
+    import open3d as o3d
+
 except ImportError as e:
     logger.exception(e)
     sys.exit(1)
@@ -355,7 +359,11 @@ if __name__ == '__main__':
         """
 
         # オリジナルデータをファイルから読む
-        filename = "bathymetry_data.csv"
+
+        # 古いデータはこれ
+        # filename = "bathymetry_data.csv"
+
+        # 新しいデータはこのファイル
         filename = "ALL_depth_map_data_202408.csv"
         file_path = os.path.join(data_dir, filename)
         df = load_csv(file_path)
@@ -397,11 +405,29 @@ if __name__ == '__main__':
         df = df.iloc[np.where(pred > 0)]
         save_scatter(df, title="drop outlier", filename="scatter_04.png")
 
+        #
+        # ボクセルグリッドフィルタ（Open3D）
+        #
+        use_boxel_grid_filter = False
+
+        if use_boxel_grid_filter:
+
+            pcd = o3d.geometry.PointCloud()
+            pcd.points = o3d.utility.Vector3dVector(df[["lat", "lon", "depth"]].values)
+            downpcd_voxel = pcd.voxel_down_sample(voxel_size=0.001)
+            voxel = np.asarray(downpcd_voxel.points)
+
+            df = pd.DataFrame(voxel, columns=["lat", "lon", "depth"])
+            print("voxel")
+            print(df.describe().to_markdown())
+            print("")
+            save_scatter(df, title="voxel", filename="scatter_05.png")
+
+
         # CSVファイルに保存、ファイル名はdata.csvで固定
         # 外部からみたこのファイルのURLはこれ
         # https://takamitsu-iida.github.io/aburatsubo-terrain-data/data/data.csv
         df.to_csv(os.path.join(data_dir, "data.csv"), index=False)
-
 
         return 0
 
