@@ -405,6 +405,11 @@ if __name__ == '__main__':
         df = df.iloc[np.where(pred > 0)]
         save_scatter(df, title="drop outlier", filename="scatter_04.png")
 
+        # 重複した座標のデータを削除する
+        df = process_duplicated(df)
+
+
+
         #
         # ボクセルグリッドフィルタ（Open3D）
         #
@@ -423,6 +428,9 @@ if __name__ == '__main__':
             print("")
             save_scatter(df, title="voxel", filename="scatter_05.png")
 
+
+        print("final data")
+        print(df.describe().to_markdown())
 
         # CSVファイルに保存、ファイル名はdata.csvで固定
         # 外部からみたこのファイルのURLはこれ
