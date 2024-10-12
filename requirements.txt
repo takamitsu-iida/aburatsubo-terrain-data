@@ -5,3 +5,4 @@ scipy
 scikit-learn
 tabulate
 open3d
+rtree

@@ -123,7 +123,6 @@ CSVから読み取った状態での散布図。左上に異常値が存在す�
 | max   |     35.1737     |    139.622      |     47.539   |
 
 
-
 <br><br>
 
 ## 実行環境メモ
@@ -161,30 +160,25 @@ latとlon、どっちが緯度でどっちが経度かすぐにわからなく�
 
 <br><br>
 
-## 参考文献（データ処理）
-
-[マーチングスクエア](https://urbanspr1nter.github.io/marchingsquares/)
-
-[マーチングキューブ](https://tatsy.github.io/programming-for-beginners/cpp/march-cubes/)
+# 参考文献（データ処理）
 
 [Python で曲面近似（サーフェスフィッティング）する](https://chuckischarles.hatenablog.com/entry/2020/02/06/081238)
 
 [カーブフィッティング手法 scipy.optimize.curve_fit の使い方を理解する](https://qiita.com/maskot1977/items/e4f5f71200180865986e)
 
-
 [The Nature of Geographic Information](https://www.e-education.psu.edu/natureofgeoinfo/c7_p9.html)
 
 <br><br>
 
-## 実装メモ
+# 実装メモ
 
 Go言語の方が書きやすいものの、データ加工処理の容易さを考慮してPythonで処理。
 
-<br><br>
+<br>
 
-### 重複削除のやり方
+## 重複削除のやり方
 
-groupbyで集約しつつ、水深の平均を計算する。
+groupbyで集約しつつ、水深の平均を計算してそれに置き換える。
 
 元データから重複行をすべて削除し、groupbyで計算したものを加える。
 
@@ -197,7 +191,9 @@ groupbyで集約しつつ、水深の平均を計算する。
         return df
 ```
 
-### 外れ値検出
+<br>
+
+## 外れ値検出
 
 Local Outlier Factorを利用する。
 
@@ -227,47 +223,63 @@ predictedは外れ値なら-1、正常値なら1が格納されたアレイ。
         df = df.iloc[np.where(pred > 0)]
 ```
 
+<br>
+
+## データ補間
+
+ポイントクラウドを可視化してみると補間の必要性が直感的に理解できる。
+
+GPS座標が存在する範囲をグリッド化して、各グリッドでの推定値を計算する。
+
+推定値はinverse distance weighted algorithmを用いる。
+
+![inverse distance weighted algorithm](./assets/inv_dist_interp.gif "inverse distance weighted algorithm")
+
+> 引用元
+>
+> https://www.e-education.psu.edu/natureofgeoinfo/c7_p9.html
+
+そのためには、グリッドの格子点の近傍に存在する値を取ってくる必要がある。
+
+これにはR-treeを使う。
+
+ということで、当面はR-treeを使った近傍探索のやり方を模索する。
 
 
-### データ補間の考え方
+<br>
 
-案１．
+### Rtree
 
-- pandasにデータを読ませる
-- 10mグリッドを想定する
-- 幅優先探索でグリッドを移動させる
-- グリッド内にデータが0件ならグリッドを、訪問済みフラグを立ててから次のグリッドに移動する
-- グリッド内にデータが1件以上あるなら、1mグリッドでデータを補間する
-    - 補間方法はRBFを利用する
-- 補間したデータをファイルに書き出す
+PythonでのRtreeの実装はいくつか存在する。
 
-案２．
+libspatialindexをPythonでラッピングしたRtreeを使ってみる。
 
-データが時系列でソートされていることを想定する。
+2024年10月時点ではバージョン1.3がインストールされた。
 
-- 先頭データを取り出す
-- 10mグリッド内に収まるデータを取り出して補間する
-- そのグリッドから抜けるところまでデータを進める
+```bash
+(.venv) iida$ pip install rtree
+Collecting rtree
+  Downloading Rtree-1.3.0-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl (543 kB)
+     |████████████████████████████████| 543 kB 912 kB/s
+Installing collected packages: rtree
+Successfully installed rtree-1.3.0
+```
 
-
-案３．
-
-ひとつの点データを7x7のグリッドに変えていく戦略。
-つまりボートを漕いだ奇跡は7mの幅に拡充されるということ。
-
-- pandasからデータを1件取り出す
-- 東に3、西に3、南に3、北に3のグリッドを作る
-- 7 x 7 が新たに作られることになる
-- 7 x 7 の座標に関して、その座標のデータがあれば、それを採用する
-- 同じ座標にデータがない場合、その座標から3mx3mの範囲内にある座標を取り出して、それらデータから推測する
-- pandasから次のデータを取り出す
-- 東に3、西に3、南に3、北に3のグリッドを作るが、すでにグリッドが作られていれば、それは省略
-- 新規に作成したグリッドに関して、データを推測していく
+> [!NOTE]
+>
+> libspatialindexのインストールが伴うので、Macだとコンパイル作業が走るかもしれない。
+>
 
 
 
 
-<br><br>
+
+
+
+
+
+
+<br><br><br><br>
 
 ## Goコードの断片（あとで消す）
 

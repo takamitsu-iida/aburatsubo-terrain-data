@@ -24,7 +24,7 @@ def here(path=''):
 
 
 # アプリケーションのホームディレクトリは一つ上
-app_home = here(".")
+app_home = here("..")
 
 # 自身の名前から拡張子を除いてプログラム名を得る
 app_name = os.path.splitext(os.path.basename(__file__))[0]
@@ -132,8 +132,8 @@ class Stats:
         self.max_lat = df["lat"].max()
         self.min_lon = df["lon"].min()
         self.max_lon = df["lon"].max()
-        #self.min_depth = df["depth"].min()
-        #self.max_depth = df["depth"].max()
+        # self.min_depth = df["depth"].min()
+        # self.max_depth = df["depth"].max()
 
         # この場所で地球を水平(holizontal)に輪切りにしたときの半径(m)と円の長さ
         h_r = EARTH_RADIUS * 1000 * math.cos(degree2radian(self.mean_lat))
@@ -149,18 +149,21 @@ class Stats:
         self.lat_unit = 360 / v_circle
 
         # 南北方向の距離(m)
-        self.distance_south_north = 2 * math.pi * EARTH_RADIUS * 1000 * (self.max_lat - self.min_lat) / 360
+        self.distance_south_north = 2 * math.pi * EARTH_RADIUS * \
+            1000 * (self.max_lat - self.min_lat) / 360
         self.distance_south_north = math.floor(self.distance_south_north)
 
         # 東西方向の距離(m)
-        self.distance_west_east = h_circle * (self.max_lon - self.min_lon) / 360
+        self.distance_west_east = h_circle * \
+            (self.max_lon - self.min_lon) / 360
         self.distance_west_east = math.floor(self.distance_west_east)
 
     def __str__(self) -> str:
         with io.StringIO() as s:
             print("lat unit: {}".format(self.lat_unit), file=s)
             print("lon unit: {}".format(self.lon_unit), file=s)
-            print("south-north distance (m): {}".format(self.distance_south_north), file=s)
+            print(
+                "south-north distance (m): {}".format(self.distance_south_north), file=s)
             print("west-east distance (m): {}".format(self.distance_west_east), file=s)
             print("", file=s)
             return s.getvalue()
@@ -201,14 +204,16 @@ if __name__ == '__main__':
         TEST_COORD_NW = (35.1636, 139.6082)
         TEST_COORD_SE = (35.1622, 139.6099)
 
-        extracted = df.query("lat > {} and lat < {} and lon > {} and lon < {}".format(TEST_COORD_SE[0], TEST_COORD_NW[0], TEST_COORD_NW[1], TEST_COORD_SE[1]))
+        extracted = df.query("lat > {} and lat < {} and lon > {} and lon < {}".format(
+            TEST_COORD_SE[0], TEST_COORD_NW[0], TEST_COORD_NW[1], TEST_COORD_SE[1]))
         lat = extracted["lat"]
         lat = (lat - lat.mean()) / lat.std()
         lon = extracted["lon"]
         lon = (lon - lon.mean()) / lon.std()
         depth = extracted["depth"]
         lat_lon = np.stack([lat, lon], -1)
-        rbf = RBFInterpolator(lat_lon, depth, kernel='thin_plate_spline', epsilon=2.0, neighbors=10)
+        rbf = RBFInterpolator(
+            lat_lon, depth, kernel='thin_plate_spline', epsilon=2.0, neighbors=10)
 
         # RBF補間を作成
         # https://docs.scipy.org/doc/scipy/reference/generated/scipy.interpolate.RBFInterpolator.html#scipy.interpolate.RBFInterpolator
@@ -282,13 +287,15 @@ if __name__ == '__main__':
         print(df.tail(3))
         print("")
         print("describe")
-        print(df.describe().to_markdown())  # to_markdown() requires tabulate module
+        # to_markdown() requires tabulate module
+        print(df.describe().to_markdown())
         print("")
 
     def save_scatter(df: pd.DataFrame, title="", filename="") -> None:
         if not filename:
             return
-        df_plt = df.plot.scatter(x="lon", y="lat", title=title, grid=True, figsize=FIG_SIZE, s=0.5)
+        df_plt = df.plot.scatter(
+            x="lon", y="lat", title=title, grid=True, figsize=FIG_SIZE, s=0.5)
         df_plt.set_xlabel("lon")
         df_plt.set_ylabel("lat")
         plt.savefig(os.path.join(img_dir, filename))
@@ -303,7 +310,8 @@ if __name__ == '__main__':
         print(dfx_uniq.describe().to_markdown())
         print("")
 
-        dfx_duplicated = dfx.groupby(["lat", "lon"])["depth"].mean().reset_index()
+        dfx_duplicated = dfx.groupby(["lat", "lon"])[
+            "depth"].mean().reset_index()
         print("duplicated coordinate")
         print(dfx_duplicated.describe().to_markdown())
         print("")
@@ -408,8 +416,6 @@ if __name__ == '__main__':
         # 重複した座標のデータを削除する
         df = process_duplicated(df)
 
-
-
         #
         # ボクセルグリッドフィルタ（Open3D）
         #
@@ -418,7 +424,8 @@ if __name__ == '__main__':
         if use_boxel_grid_filter:
 
             pcd = o3d.geometry.PointCloud()
-            pcd.points = o3d.utility.Vector3dVector(df[["lat", "lon", "depth"]].values)
+            pcd.points = o3d.utility.Vector3dVector(
+                df[["lat", "lon", "depth"]].values)
             downpcd_voxel = pcd.voxel_down_sample(voxel_size=0.001)
             voxel = np.asarray(downpcd_voxel.points)
 
@@ -427,7 +434,6 @@ if __name__ == '__main__':
             print(df.describe().to_markdown())
             print("")
             save_scatter(df, title="voxel", filename="scatter_05.png")
-
 
         print("final data")
         print(df.describe().to_markdown())
