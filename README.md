@@ -43,6 +43,16 @@ https://maps.fishdeeper.com/ja-jp
 
 <br>
 
+> [!NOTE]
+>
+> ファイルが多すぎてわけがわからなくなりそうなのでメモ。
+>
+> main.pyで `ALL_depth_map_data_202408.csv` を読み込んで `data.csv` を出力している。
+>
+> `data.csv` をJavaScriptでポイントクラウドとして可視化して、明らかに異常値と考えられる点を目視で削除したのが `depth_map_data_edited.csv` である。
+
+<br>
+
 サイズは約8MBで約22万行。
 
 各行は `lat, lon, depth, unix_time_in_msec` の情報で構成されている。
