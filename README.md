@@ -21,7 +21,7 @@ https://maps.fishdeeper.com/ja-jp
 >
 > 仕様が変わって、ハンバーガーメニューからダウンロードを選択すると、depth_map_data.csvというファイルが取得できる。
 >
-> 釣行ごとのファイルの場合、水深マップかスキャンデータ、どちらかを選択してダウンロードできるようになっている。
+> 仕様変更前にダウンロードしたファイルは `./data/bathymetry_data.csv` として残してある。
 
 <br>
 
@@ -31,7 +31,7 @@ https://maps.fishdeeper.com/ja-jp
 >
 > 2017年9月よりも古いデータは参考にならないと判断してクラウドから削除。
 >
-> 重複して登録されているデータもクラウドから削除。
+> なぜか重複して登録されているデータもクラウドから削除。
 
 <br>
 
@@ -43,15 +43,29 @@ https://maps.fishdeeper.com/ja-jp
 
 <br>
 
-> [!NOTE]
->
-> ファイルが多すぎてわけがわからなくなりそうなのでメモ。
->
-> main.pyで `ALL_depth_map_data_202408.csv` を読み込んで `data.csv` を出力している。
->
-> `data.csv` をJavaScriptでポイントクラウドとして可視化して、明らかに異常値と考えられる点を目視で削除したのが `depth_map_data_edited.csv` である。
+## 自分用作業メモ
+
+1. main.pyで `ALL_depth_map_data_202408.csv` を読み込んで `./static/data/depth_map_data.csv` を出力する
+
+main.pyは主に重複データの集約と、明らかな異常値の排除を行う。
+
+TODO: 入力に使うファイルはスクリプトに埋め込んでしまっているので要改善。
+
+TODO: 出力するファイルの場所は '/static/data/' にしないとJavaScript側が読み込めないので、出力先を変更する
+
+2. `./static/data/depth_map_data.csv` をJavaScriptでポイントクラウドとして可視化して、目視で異常値と考えられる点を削除する。
+
+ファイル名は `depth_map_data_edited.csv` としてブラウザからダウンロードされるので、それを手作業で移動する。
+
+次の手順はpythonスクリプトなので `./data/` 配下に移動する。
+
+3. 四分木スクリプトで `depth_map_data_edited.csv` を読み込んで `depth_map_data_final.csv` を出力する
+
+出力先は `./static/data` のは以下。
 
 <br>
+
+## CSVファイルの概要
 
 サイズは約8MBで約22万行。
 
@@ -205,11 +219,68 @@ groupbyで集約しつつ、水深の平均を計算してそれに置き換え�
 
 ## 外れ値検出
 
-Local Outlier Factorを利用する。
+Local Outlier Factor（局所外れ値因子法）を利用する。
+
+LOFの手順
+
+1. 到達可能性距離（Reachability Distance）の計算
+2. 局所到達可能性密度（Local Reachability Density）の計算
+3. LOF（Local Outlier Factor）の計算
+
+
+### 到達可能性距離（Reachability Distance）
+
+` reachability_disktance_k(a,b) = max{k_distance(b), d(a, b)} `
+
+```text
+
+ a  b
+    c   d
+
+```
+
+- aを取り出す。
+- aの隣接ノードbを取り出す。
+- bからK番目に近い点を取り出す。この場合はdを取り出す。
+- a-b間の距離とb-d間の距離の大きい方を取り出したものが `reachability_disktance_k(a,b)` となっている
+
+### 局所到達可能性密度（Local Reachability Density）
+
+`lrd_k(a) = 1 ÷ (reachability_disktance_k(a, b) + reachability_disktance_k(a, c)) / 2`
+
+
+```text
+
+ a  b
+    c   d
+
+```
+
+- aを取り出す
+- aの近傍点b, cを取り出す
+- reachability_disktance_k(a, b)を計算する、つまりbからk番目に遠い点の距離を計算して、大きい方を採用する
+- reachability_disktance_k(a, c)を計算する、つまりcからk番目に遠い点の距離を計算して、大きい方を採用する
+- reachability_disktance_k(a, b)とreachability_disktance_k(a, c)の平均値を出す
+- それを1で割る
+
+### LOF（Local Outlier Factor）
+
+`LOF_k(a) = ( lrd_k(b)/lrd_k(a) + lrd_k(c)/lrd_k(a) ) / k`
+
+これが大きいほど、異常値と考えられる。
+
+
+### scikit-learnによるLOF
+
+scikit-learnのLocalOutlierFactorを使うと簡単に計算できる。
 
 ```python
 from sklearn.neighbors import LocalOutlierFactor  # process_outlier()
 ```
+
+kの値は、引数n_neighborsで与える。
+
+適切な値は試行錯誤で決める。10とかが適切かな？
 
 ```python
         def local_outlier_factor(n_neighbors=20):
