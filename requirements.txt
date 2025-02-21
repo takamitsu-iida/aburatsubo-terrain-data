@@ -6,3 +6,4 @@ scikit-learn
 tabulate
 open3d
 rtree
+jupyter

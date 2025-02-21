@@ -354,11 +354,100 @@ Successfully installed rtree-1.3.0
 
 
 
+### jupyter notebook
+
+試行錯誤しながらデータを加工するときにはjupyter notebookを使えたほうが便利。
+
+WSLにインストールする方法。
+
+```bash
+pip install jupyter
+```
+
+venvを使っている場合はその環境下にインストールされる。
+
+WSLでjupyterを走らせるには、設定の追加が必要。
+
+`--generate-config`オプションをつけて起動すると、デフォルトのコンフィグファイルが `~/.jupyter/jupyter_notebook_config.py` に作成される。
+
+```bash
+iida@FCCLS0073460:~/git/aburatsubo-terrain-data$ jupyter notebook --generate-config
+Writing default config to: /home/iida/.jupyter/jupyter_notebook_config.py
+```
+
+場所はホームディレクトリ直下なので、このファイルを環境ごとに変更することはできない。
+
+なので、それをコピーしてjupyterを実行するときに、編集した別のコンフィグファイルを指定する。
+
+まずは、ノートブックを保存したいディレクトリ（ここではipynb）を作って、そこに移動し、デフォルトのコンフィグファイルをコピーする。
+
+```bash
+mkdir ipynb
+cd ipynb
+cp ~/.jupyter/jupyter_notebook_config.py .
+```
+
+追加すべき設定は `c.NotebookApp.use_redirect_file = False` という1行だけなので、以下のようにコンフィグファイルの最後に追記する。
+
+```bash
+$ echo "c.NotebookApp.use_redirect_file = False" >> jupyter_notebook_config.py
+```
+
+実行するときに `--config` オプションで編集したファイルを指定する。
+
+```bash
+jupyter notebook --config jupyter_notebook_config.py
+```
+
+終了するときは `ctrl-c` を2回連打する。
+
+ターミナルを占有されてしまうのを避けるには、バックグランドで起動する。
+
+```bash
+nohup jupyter notebook --config jupyter_notebook_config.py >> jupyter.log 2>&1 &
+```
+
+これを停止するならブラウザで `File -> Shut Down` でよい。
+
+```bash
+pgrep -f jupyter-notebook
+```
+
+でプロセスを探してkillしてもよい。
 
 
+実行時のオプションが多くて手打ちするのは大変なのでシェルスクリプトにした。
 
+```bash
+./start-jupyter.sh
+```
 
+これの中身。
 
+```bash
+#!/bin/bash
+
+# このファイルのある場所
+CURRENT_DIR=$(cd $(dirname $0);pwd)
+
+# Start Jupyter Notebook
+# logディレクトリがなければ作成する
+if [ ! -d $CURRENT_DIR/log ]; then
+    mkdir $CURRENT_DIR/log
+fi
+
+# すでに実行中のjupyter notebookがないか確認する
+if pgrep -f jupyter-notebook > /dev/null; then
+    echo "Jupyter Notebook is already running."
+    exit 1
+fi
+
+# Jupyter Notebookをバックグラウンドで起動する
+# nohup: ログアウト後もプロセスを継続する
+nohup jupyter-notebook --config $CURRENT_DIR/jupyter_notebook_config.py --notebook-dir $CURRENT_DIR >> $CURRENT_DIR/log/jupyter.log 2>&1 &
+echo "Jupyter Notebook started. Check log/jupyter.log for details."
+echo "You can access the notebook at http://localhost:8888"
+```
 
 <br><br><br><br>
 
