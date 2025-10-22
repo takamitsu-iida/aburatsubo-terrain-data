@@ -17,26 +17,24 @@ import math
 import os
 import sys
 
-
-def here(path=''):
-    """相対パスを絶対パスに変換して返却します"""
-    return os.path.abspath(os.path.join(os.path.dirname(__file__), path))
+from pathlib import Path
 
 
-# アプリケーションのホームディレクトリは一つ上
-app_home = here("..")
+# このファイルへのPathオブジェクト
+app_path = Path(__file__)
 
-# 自身の名前から拡張子を除いてプログラム名を得る
-app_name = os.path.splitext(os.path.basename(__file__))[0]
+# このファイルがあるディレクトリ
+app_dir = app_path.parent
+
+# このファイルの名前から拡張子を除いてプログラム名を得る
+app_name = app_path.stem
+
+# アプリケーションのホームディレクトリはこのファイルからみて一つ上
+app_home = app_path.parent.joinpath('..').resolve()
 
 # ディレクトリ
-data_dir = os.path.join(app_home, "data")
-img_dir = os.path.join(app_home, "img")
-
-# libフォルダにおいたpythonスクリプトをインポートできるようにするための処理
-# このファイルの位置から一つ
-if not here("./lib") in sys.path:
-    sys.path.append(here("./lib"))
+data_dir = app_home.joinpath("data")
+img_dir = app_home.joinpath("img")
 
 #
 # ログ設定
@@ -46,12 +44,8 @@ if not here("./lib") in sys.path:
 log_file = app_name + ".log"
 
 # ログファイルを置くディレクトリ
-log_dir = os.path.join(app_home, "log")
-try:
-    if not os.path.isdir(log_dir):
-        os.makedirs(log_dir)
-except OSError:
-    pass
+log_dir = app_home.joinpath("log")
+log_dir.mkdir(exist_ok=True)
 
 # ロギングの設定
 # レベルはこの順で下にいくほど詳細になる
@@ -65,9 +59,6 @@ except OSError:
 # logger.debug("debugレベルのログメッセージ")
 # logger.info("infoレベルのログメッセージ")
 # logger.warning("warningレベルのログメッセージ")
-
-# default setting
-logging.basicConfig()
 
 # ロガーを取得
 logger = logging.getLogger(__name__)

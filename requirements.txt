@@ -1,9 +1,18 @@
+# for data processing and analysis
 numpy
 matplotlib
 pandas
 scipy
 scikit-learn
-tabulate
 open3d
 rtree
 jupyter
+
+# for tabular data display
+tabulate
+
+# for geocoding
+geopy
+
+# for testing
+pytest

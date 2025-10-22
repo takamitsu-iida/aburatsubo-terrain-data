@@ -1,12 +1,13 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
+#!/usr/bin/env python
 
-"""rtreeを動かす練習スクリプト
-"""
+# 四分木を実装したスクリプトです。
 
 __author__ = "takamitsu-iida"
 __version__ = "0.1"
-__date__ = "2024/10/10"
+__date__ = "2024/10/10初版, 2025/10/22修正"
+
+# ログをファイルにも出力するかどうか
+USE_FILE_HANDLER = True
 
 #
 # 標準ライブラリのインポート
@@ -15,41 +16,55 @@ import logging
 import os
 import sys
 
+from pathlib import Path
+from typing import List, Tuple, Optional, Dict, Any
 
-def here(path=''):
-    """相対パスを絶対パスに変換して返却します"""
-    return os.path.abspath(os.path.join(os.path.dirname(__file__), path))
+# WSL1 固有の numpy 警告を抑制
+# https://github.com/numpy/numpy/issues/18900
+
+import warnings
+warnings.filterwarnings(action="ignore", category=UserWarning, module=r"numpy.*", message=r"Signature b")
+
+#
+# 外部ライブラリのインポート
+#
+try:
+    import matplotlib.pyplot as plt
+    from tabulate import tabulate
+    from geopy.distance import great_circle, distance
+except ImportError as e:
+    print(f"必要なライブラリがインストールされていません: {e}")
+    sys.exit(1)
 
 
-# アプリケーションのホームディレクトリは一つ上
-app_home = here("..")
+# このファイルへのPathオブジェクト
+app_path = Path(__file__)
 
-# 自身の名前から拡張子を除いてプログラム名を得る
-app_name = os.path.splitext(os.path.basename(__file__))[0]
+# このファイルがあるディレクトリ
+app_dir = app_path.parent
+
+# このファイルの名前から拡張子を除いてプログラム名を得る
+app_name = app_path.stem
+
+# アプリケーションのホームディレクトリはこのファイルからみて一つ上
+app_home = app_path.parent.joinpath('..').resolve()
 
 # ディレクトリ
-data_dir = os.path.join(app_home, "data")
-img_dir = os.path.join(app_home, "img")
-
-# libフォルダにおいたpythonスクリプトをインポートできるようにするための処理
-# このファイルの位置から一つ
-if not here("./lib") in sys.path:
-    sys.path.append(here("./lib"))
+data_dir = app_home.joinpath("data")
 
 #
 # ログ設定
 #
 
 # ログファイルの名前
-log_file = app_name + ".log"
+log_file = app_path.with_suffix('.log').name
 
 # ログファイルを置くディレクトリ
-log_dir = os.path.join(app_home, "log")
-try:
-    if not os.path.isdir(log_dir):
-        os.makedirs(log_dir)
-except OSError:
-    pass
+log_dir = app_home.joinpath('log')
+log_dir.mkdir(exist_ok=True)
+
+# ログファイルのパス
+log_path = log_dir.joinpath(log_file)
 
 # ロギングの設定
 # レベルはこの順で下にいくほど詳細になる
@@ -63,9 +78,6 @@ except OSError:
 # logger.debug("debugレベルのログメッセージ")
 # logger.info("infoレベルのログメッセージ")
 # logger.warning("warningレベルのログメッセージ")
-
-# default setting
-logging.basicConfig()
 
 # ロガーを取得
 logger = logging.getLogger(__name__)
@@ -83,7 +95,6 @@ stdout_handler.setLevel(logging.INFO)
 logger.addHandler(stdout_handler)
 
 # ログファイルのハンドラ
-USE_FILE_HANDLER = True
 if USE_FILE_HANDLER:
     file_handler = logging.FileHandler(os.path.join(log_dir, log_file), 'a+')
     file_handler.setFormatter(formatter)
@@ -94,183 +105,368 @@ if USE_FILE_HANDLER:
 # ここからスクリプト
 #
 
-class Area:
-    def __init__(self, x1, y1, x2, y2, level):
-        self.x1 = x1
-        self.y1 = y1
-        self.x2 = x2
-        self.y2 = y2
-        self.level = level
-        self.__points = []
-        self.fixed = False
+class QuadtreeNode:
+    """ 四分木のノードを表すクラス """
 
-    def append(self, p):
-        """ 領域にデータ点を追加 """
-        self.__points.append(p)
+    MAX_POINTS = 4
+    MAX_DEPTH = 10
 
-    def points(self):
-        """ 領域に属しているデータ点を返す """
-        return self.__points
+    def __init__(self, bounds: Tuple[float, float, float, float], depth: int, parent: Optional['QuadtreeNode'] = None):
+        # boundsは (lat1, lon1, lat2, lon2) の形式
+        self.bounds: Tuple[float, float, float, float] = bounds
+        self.depth: int = depth
+        self.points: List[Dict[str, float]] = []
+        self.children: List['QuadtreeNode'] = []
+        self.parent: Optional['QuadtreeNode'] = parent
 
-    def is_fixed(self):
-        """ 分割が終わっているかどうか """
-        return self.fixed
+    def is_leaf(self) -> bool:
+        """ ノードが葉ノードかどうかを判定 """
+        return len(self.children) == 0
 
-    def set_fixed(self):
-        """ 分割が終わったフラグを立てる """
-        self.fixed = True
+    def subdivide(self):
+        """ ノードを4つの子ノードに分割 """
+        lat1, lon1, lat2, lon2 = self.bounds
+        mid_lat = (lat1 + lat2) / 2
+        mid_lon = (lon1 + lon2) / 2
 
-    def cover(self, p):
-        """ あるデータ点pがこの領域にカバーされるかどうか """
-        if self.x1 < p[0] and self.y1 < p[1] and self.x2 >= p[0] and self.y2 >= p[1]:
-            return True
-        else:
+        #
+        # NW | NE
+        # ---+---
+        # SW | SE
+        #
+
+        # NW
+        self.children.append(QuadtreeNode((lat1, lon1, mid_lat, mid_lon), self.depth + 1, self))
+        # NE
+        self.children.append(QuadtreeNode((lat1, mid_lon, mid_lat, lon2), self.depth + 1, self))
+        # SW
+        self.children.append(QuadtreeNode((mid_lat, lon1, lat2, mid_lon), self.depth + 1, self))
+        # SE
+        self.children.append(QuadtreeNode((mid_lat, mid_lon, lat2, lon2), self.depth + 1, self))
+
+
+    def insert(self, point: Dict[str, float]) -> bool:
+        """ ノードにポイントを挿入 """
+        if not self.contains(point):
             return False
 
-
-def divide(area, level):
-    division = []
-
-    """ 分割後の各辺の長さ """
-    xl = (area.x2 - area.x1)/2
-    yl = (area.y2 - area.y1)/2
-
-    """ 分割後の領域を生成 """
-    for dx in [0, 1]:
-        for dy in [0, 1]:
-            sub_area = Area(area.x1+dx*xl, area.y1+dy*yl, area.x1+(1+dx)*xl, area.y1+(1+dy)*yl, level)
-            division.append(sub_area)
-
-    """ 分割前の領域に属すデータ点を分割後の領域にアサイン """
-    for p in area.points():
-        for sub_area in division:
-            if sub_area.cover(p):
-                sub_area.append(p)
-                break
-
-    return division
-
-
-def quadtree(initial, maxpoints, maxdivision):
-    areas = [initial]
-
-    """ 引数で与えられたmaxdivision回だけ分割を繰り返す """
-    for n in range(maxdivision):
-        new_areas = []
-        for i in range(len(areas)):
-            if not areas[i].is_fixed():
-                """ まだ分割が終わっていない領域に対して """
-                if len(areas[i].points()) > maxpoints:
-                    """ 領域に属すデータ点の数がmaxpoints個を超えていたら分割 """
-                    division = divide(areas[i], n+1)
-                    for d in division:
-                        new_areas.append(d)
-                else:
-                    """ 領域に属すデータ点の数がmaxpoints個を超えていなかったらもう分割しない """
-                    areas[i].set_fixed()
-                    new_areas.append(areas[i])
+        if self.is_leaf():
+            if len(self.points) < QuadtreeNode.MAX_POINTS or self.depth >= QuadtreeNode.MAX_DEPTH:
+                self.points.append(point)
+                return True
             else:
-                """ 分割が終わっていればそのまま """
-                new_areas.append(areas[i])
-        areas = new_areas
+                self.subdivide()
 
-    return areas
+        for child in self.children:
+            if child.insert(point):
+                return True
+
+        return False
+
+
+    def contains(self, point: Dict[str, float]) -> bool:
+        """ ノードの範囲内にポイントが含まれるかどうかを判定 """
+        lat1, lon1, lat2, lon2 = self.bounds
+        return lat1 <= point['lat'] < lat2 and lon1 <= point['lon'] < lon2
+
+
+    def intersects(self, range: Tuple[float, float, float, float]) -> bool:
+        """ ノードの範囲が指定された範囲と交差するかどうかを判定 """
+        lat1, lon1, lat2, lon2 = self.bounds
+        r_lat1, r_lon1, r_lat2, r_lon2 = range
+        return not (r_lon1 >= lon2 or r_lon2 <= lon1 or r_lat1 >= lat2 or r_lat2 <= lat1)
+
+
+    def query(self, range: Tuple[float, float, float, float]) -> List[Dict[str, float]]:
+        """ 指定された範囲内のポイントを検索 """
+        found_points = []
+        if not self.intersects(range):
+            return found_points
+
+        for point in self.points:
+            if self.contains_point_in_range(point, range):
+                found_points.append(point)
+
+        if not self.is_leaf():
+            for child in self.children:
+                found_points.extend(child.query(range))
+
+        return found_points
+
+
+    def contains_point_in_range(self, point: Dict[str, float], range: Tuple[float, float, float, float]) -> bool:
+        """ 指定された範囲内にポイントが含まれるかどうかを判定 """
+        r_lat1, r_lon1, r_lat2, r_lon2 = range
+        return r_lat1 <= point['lat'] < r_lat2 and r_lon1 <= point['lon'] < r_lon2
+
+    def get_nodes_at_depth(self, depth: int) -> List['QuadtreeNode']:
+        """ 指定された深さのノードを取得 """
+        nodes = []
+        if self.depth == depth:
+            nodes.append(self)
+        elif self.depth < depth:
+            for child in self.children:
+                nodes.extend(child.get_nodes_at_depth(depth))
+        return nodes
+
+
+    def get_leaf_nodes(self) -> List['QuadtreeNode']:
+        """ 葉ノードをすべて取得 """
+        if self.is_leaf():
+            return [self]
+        else:
+            leaf_nodes = []
+            for child in self.children:
+                leaf_nodes.extend(child.get_leaf_nodes())
+            return leaf_nodes
+
+
+class Quadtree:
+
+    """ 四分木クラス """
+
+    def __init__(self, bounds: Tuple[float, float, float, float]):
+        self.root = QuadtreeNode(bounds, 0)
+
+
+    def insert(self, point: Dict[str, float]) -> bool:
+        return self.root.insert(point)
+
+
+    def query(self, range: Tuple[float, float, float, float]) -> List[Dict[str, float]]:
+        return self.root.query(range)
+
+
+    def get_nodes_at_depth(self, depth: int) -> List[QuadtreeNode]:
+        return self.root.get_nodes_at_depth(depth)
+
+
+    def get_leaf_nodes(self) -> List[QuadtreeNode]:
+        return self.root.get_leaf_nodes()
+
+    def stats(self) -> Dict[str, Any]:
+        """
+        四分木の統計情報を返す
+        - 総ノード数
+        - 葉ノード数
+        - 最大深さ
+        - 各葉ノードの点数の最大・最小・平均
+        """
+        all_nodes = []
+        def collect_nodes(node):
+            all_nodes.append(node)
+            for child in node.children:
+                collect_nodes(child)
+        collect_nodes(self.root)
+
+        leaf_nodes = self.get_leaf_nodes()
+        leaf_points_counts = [len(node.points) for node in leaf_nodes]
+        max_depth = max(node.depth for node in all_nodes)
+
+        # tabulateで統計情報を表示する
+        table = [
+            ["total_nodes", int(len(all_nodes))],
+            ["leaf_nodes", int(len(leaf_nodes))],
+            ["max_depth", int(max_depth)],
+            ["leaf_points_max", int(max(leaf_points_counts)) if leaf_points_counts else 0],
+            ["leaf_points_min", int(min(leaf_points_counts)) if leaf_points_counts else 0]
+        ]
+        headers = ["", "value"]
+        logger.info(f"Quadtree stats\n{tabulate(table, headers=headers, floatfmt='.0f', numalign='right')}")
+
+        return {
+            "total_nodes": len(all_nodes),
+            "leaf_nodes": len(leaf_nodes),
+            "max_depth": max_depth,
+            "leaf_points_max": max(leaf_points_counts) if leaf_points_counts else 0,
+            "leaf_points_min": min(leaf_points_counts) if leaf_points_counts else 0
+        }
+
+
+
+def get_latlon_delta(lat: float, lon: float, meters: float = 1.0) -> tuple[float, float]:
+    """
+    指定した緯度経度における、指定距離（メートル）のグリッドの緯度・経度の差分を返す。
+
+    Args:
+        lat (float): 基準となる緯度
+        lon (float): 基準となる経度
+        meters (float): 距離（メートル）
+
+    Returns:
+        (delta_lat, delta_lon): 指定距離だけ移動したときの緯度・経度の差分
+    """
+    # 緯度方向にmeters移動
+    lat1 = distance(meters=meters).destination((lat, lon), bearing=0).latitude
+
+    # 経度方向にmeters移動
+    lon1 = distance(meters=meters).destination((lat, lon), bearing=90).longitude
+
+    delta_lat = lat1 - lat
+    delta_lon = lon1 - lon
+    return delta_lat, delta_lon
+
+
+def read_csv(filepath) -> Tuple[List[List[float]], Dict[str, Dict[str, float]]]:
+    """
+    CSVファイルを読み込み、データのリストと各カラム（lat, lon, depth）の最大・最小値を返す。
+
+    Returns:
+        data: List[List[float]]
+        stats: Dict[str, Dict[str, float]]
+            例:
+              {
+                'lat': {'min': ..., 'max': ...},
+                'lon': {'min': ..., 'max': ...},
+                'depth': {'min': ..., 'max': ...}
+              }
+    """
+    data = []
+    min_lat = float('inf')
+    max_lat = float('-inf')
+    min_lon = float('inf')
+    max_lon = float('-inf')
+    min_depth = float('inf')
+    max_depth = float('-inf')
+
+    with open(filepath, 'r') as f:
+        for line in f:
+            try:
+                lat, lon, depth = [float(x) for x in line.strip().split(',')[:3]]
+            except ValueError:
+                continue
+            data.append([lat, lon, depth])
+            min_lat = min(min_lat, lat)
+            max_lat = max(max_lat, lat)
+            min_lon = min(min_lon, lon)
+            max_lon = max(max_lon, lon)
+            min_depth = min(min_depth, depth)
+            max_depth = max(max_depth, depth)
+
+    stats = {
+        'lat': {'min': min_lat, 'max': max_lat},
+        'lon': {'min': min_lon, 'max': max_lon},
+        'depth': {'min': min_depth, 'max': max_depth}
+    }
+
+    table = [
+        ["min", stats['lat']['min'], stats['lon']['min'], stats['depth']['min']],
+        ["max", stats['lat']['max'], stats['lon']['max'], stats['depth']['max']],
+    ]
+    headers = ["", "lat", "lon", "depth"]
+    logger.info(f"data stats\n{tabulate(table, headers=headers, floatfmt='.6f')}")
+
+    return data, stats
+
+
+
+
+
+def save_quadtree_image(
+    quadtree: 'Quadtree',
+    filename: str,
+    figsize: Tuple[int, int] = (10, 10),
+    dpi: int = 200,
+    draw_points: bool = True,
+    draw_rects: bool = True,
+    rect_color: str = "red",
+    point_color: str = "blue",
+    alpha: float = 0.3,
+):
+    """
+    Quadtreeの点群とノード境界を画像として保存する
+
+    Args:
+        quadtree (Quadtree): 可視化したい四分木
+        filename (str): 保存先ファイル名（例: "output.png"）
+        figsize (tuple): 画像サイズ
+        dpi (int): 解像度
+        draw_points (bool): 点群を描画するか
+        draw_rects (bool): ノード境界を描画するか
+        rect_color (str): 境界線の色
+        point_color (str): 点の色
+        alpha (float): 境界線の透明度
+    """
+    fig, ax = plt.subplots(figsize=figsize, dpi=dpi)
+
+    # 点群の描画
+    if draw_points:
+        all_points = []
+        for node in quadtree.get_leaf_nodes():
+            for p in node.points:
+                all_points.append((p['lon'], p['lat']))
+        if all_points:
+            xs, ys = zip(*all_points)
+            ax.scatter(xs, ys, s=1, color=point_color, alpha=0.7, label="points")
+
+    # ノード境界の描画
+    def draw_node_rect(node: 'QuadtreeNode'):
+        lat1, lon1, lat2, lon2 = node.bounds
+        width = lon2 - lon1
+        height = lat2 - lat1
+        rect = plt.Rectangle((lon1, lat1), width, height, fill=False, edgecolor=rect_color, alpha=alpha, linewidth=0.5)
+        ax.add_patch(rect)
+        for child in node.children:
+            draw_node_rect(child)
+
+    if draw_rects:
+        draw_node_rect(quadtree.root)
+
+    ax.set_xlabel("Longitude")
+    ax.set_ylabel("Latitude")
+    ax.set_title("Quadtree Points and Node Boundaries")
+    ax.set_aspect('equal')
+    ax.legend(loc="upper right", markerscale=6)
+    plt.tight_layout()
+    plt.savefig(filename)
+    plt.close(fig)
 
 
 if __name__ == '__main__':
 
-    test_data = [
-        [0.567603099626, 0.410160220857],
-        [0.405568042222, 0.555583016695],
-        [0.450289054963, 0.252870772505],
-        [0.373657009068, 0.549501477427],
-        [0.500192599714, 0.352420542886],
-        [0.626796922, 0.422685113179],
-        [0.527521290061, 0.483502904656],
-        [0.407737520746, 0.570049935936],
-        [0.578095278433, 0.6959689898],
-        [0.271957975882, 0.450460115198],
-        [0.56451369371, 0.491139311353],
-        [0.532304354436, 0.486931064003],
-        [0.553942716039, 0.51953331907],
-        [0.627341495722, 0.396617894317],
-        [0.454210189397, 0.570214499065],
-        [0.327359895038, 0.582972137899],
-        [0.422271372537, 0.560892624101],
-        [0.443036148978, 0.434529240506],
-        [0.644625936719, 0.542486338813],
-        [0.447813648487, 0.575896033203],
-        [0.534217713171, 0.636123087401],
-        [0.348346109137, 0.312959224746],
-        [0.484075186327, 0.289521849258],
-        [0.588417643962, 0.387831556678],
-        [0.613422176662, 0.665770829308],
-        [0.60994411786, 0.399778040078],
-        [0.425443751505, 0.402619561402],
-        [0.504955932504, 0.610015349003],
-        [0.402852203978, 0.382379275531],
-        [0.387591801531, 0.452180343665]
-    ]
+    def misc():
+        # 座標を (緯度, 経度) のタプルで定義
+        tokyo = (35.681236, 139.767125)
+        osaka = (34.702485, 135.495574)
 
-    def read_csv(filepath):
-        """ CSVファイルを読み込んでリストを返す """
-        data = []
-        with open(filepath, 'r') as f:
-            for line in f:
-                try:
-                    data.append([float(x) for x in line.strip().split(',')])
-                except ValueError:
-                    pass
-        return data
+        # great_circle (ハバーサインよりも高精度な測地線距離に近い計算) を使用して距離を計算
+        d = great_circle(tokyo, osaka)
 
+        print(f"geopyによる距離: {d.km:.2f} km")
 
-    def dump_area(area):
-        for a in area:
-            print("%s %s %s %s" % (a.x1, a.y1, a.x2, a.y2), end=' ')
-            for p in a.points():
-                print(p, end=' ')
-            print()
+        delta_lat, delta_lon = get_latlon_delta(tokyo[0], tokyo[1], meters=5)
+        print(f"5m四方の緯度差: {delta_lat:.8f}, 経度差: {delta_lon:.8f}")
+
 
 
     def main():
         data_filename = "data.csv"
-        data_path = os.path.join(data_dir, data_filename)
-        if not os.path.exists(data_path):
+        data_path = data_dir.joinpath(data_filename)
+        if not data_path.exists():
             logger.error("File not found: %s" % data_path)
-            return 1
+            return
 
-        data = read_csv(data_path)
+        data, data_stats = read_csv(data_path)
 
-        # |       |             lat |             lon |        depth |
-        # |:------|----------------:|----------------:|-------------:|
-        # | count | 107440          | 107440          | 107440       |
-        # | mean  |     35.1641     |    139.608      |     16.4776  |
-        # | std   |      0.00237647 |      0.00435879 |      9.62367 |
-        # | min   |     35.1572     |    139.599      |      1.082   |
-        # | 25%   |     35.1628     |    139.604      |      8.409   |
-        # | 50%   |     35.164      |    139.608      |     15.09    |
-        # | 75%   |     35.1649     |    139.61       |     21.928   |
-        # | max   |     35.1737     |    139.622      |     47.539   |
+        #           lat         lon      depth
+        # ---  ---------  ----------  ---------
+        # min  35.157248  139.598684   1.082000
+        # max  35.173733  139.621782  47.539000
 
-        x_min = 35.1572
-        y_min = 139.599
-        x_max = 35.1737
-        y_max = 139.622
-        maxpoints = 5
-        maxdivision = 20
+        bounds = (data_stats['lat']['min'], data_stats['lon']['min'], data_stats['lat']['max'], data_stats['lon']['max'])
+        quadtree = Quadtree(bounds)
 
-        """ 対象とする領域を生成 """
-        initial = Area(x_min, y_min, x_max, y_max, 0)
-        for d in data:
-            initial.append(d)
+        for row in data:
+            lat, lon, depth = row
+            point = {'lat': lat, 'lon': lon, 'depth': depth}
+            quadtree.insert(point)
 
-        """ 分割 """
-        area = quadtree(initial, maxpoints, maxdivision)
+        quadtree.stats()
+        output_image_path = log_dir.joinpath("quadtree_visualization.png")
+        save_quadtree_image(quadtree, output_image_path)
 
-        """ 結果 """
-        dump_area(area)
-
-        return 0
-
+    #
     # 実行
-    sys.exit(main())
+    #
+
+    main()

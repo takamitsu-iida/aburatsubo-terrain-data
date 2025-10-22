@@ -4,8 +4,32 @@
 
 https://takamitsu-iida.github.io/aburatsubo-terrain-data/data/data.csv
 
-<br>
-<br>
+
+<br><br>
+
+## 環境構築
+
+binディレクトリにスクリプトを配置。
+
+testsディレクトリにテスト用スクリプトを配置。
+
+binディレクトリにあるスクリプトを外部からimportするには、
+PYTHONPATHの設定が必要。
+vscodeは .env ファイルがあればそれを読み取るので、以下のように設定する。
+
+```bash
+PYTHONPATH=bin
+```
+
+あとはvenvで仮想環境を整える。
+
+```bash
+python3 -m venv .venv
+pip install --upgrade pip
+pip install -r requirements.txt
+```
+
+<br><br>
 
 ## CSVデータ
 
