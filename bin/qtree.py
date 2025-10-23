@@ -235,6 +235,17 @@ class QuadtreeNode:
             return leaf_nodes
 
 
+    def aggregate_average(self) -> Dict[str, float]:
+        """ ノード内のポイントの平均値を計算 """
+        n = len(self.points)
+        if n == 0:
+            return {}
+        avg_lat = sum(p['lat'] for p in self.points) / n
+        avg_lon = sum(p['lon'] for p in self.points) / n
+        avg_depth = sum(p['depth'] for p in self.points) / n
+        return {'lat': avg_lat, 'lon': avg_lon, 'depth': avg_depth}
+
+
 class Quadtree:
 
     """ 四分木クラス """
@@ -271,15 +282,22 @@ class Quadtree:
         logger.info(f"Quadtree initialized with LEVEL_LIMIT={Quadtree.LEVEL_LIMIT} (square_length={square_length:.2f} m)")
 
 
-
-
-
     def insert(self, point: Dict[str, float]) -> bool:
         return self.root.insert(point)
 
 
     def query(self, range: Tuple[float, float, float, float]) -> List[Dict[str, float]]:
         return self.root.query(range)
+
+
+    def get_all_nodes(self) -> List[QuadtreeNode]:
+        all_nodes = []
+        def collect_nodes(node):
+            all_nodes.append(node)
+            for child in node.children:
+                collect_nodes(child)
+        collect_nodes(self.root)
+        return all_nodes
 
 
     def get_nodes_at_level(self, level: int) -> List[QuadtreeNode]:
@@ -334,7 +352,6 @@ class Quadtree:
             "leaf_points_max": max(leaf_points_counts) if leaf_points_counts else 0,
             "deepest_node_size_m": deepest_node_size
         }
-
 
 
 def get_latlon_delta(lat: float, lon: float, meters: float = 1.0) -> tuple[float, float]:
@@ -491,7 +508,6 @@ if __name__ == '__main__':
         print(f"5m四方の緯度差: {delta_lat:.8f}, 経度差: {delta_lon:.8f}")
 
 
-
     def main():
         data_filename = "data.csv"
         data_path = data_dir.joinpath(data_filename)
@@ -528,7 +544,7 @@ if __name__ == '__main__':
         # 四分木の統計情報を取得
         stats = quadtree.stats()
 
-        # tabulateで四分木の統計情報を表示する
+        # 四分木の統計情報を表示する
         table = [
             ["total_nodes", stats.get("total_nodes", 0)],
             ["leaf_nodes", stats.get("leaf_nodes", 0)],
@@ -540,11 +556,29 @@ if __name__ == '__main__':
         headers = ["", "value"]
         logger.info(f"Quadtree stats\n{tabulate(table, headers=headers, numalign='right')}")
 
-        logger.info(stats.get("deepest_node_size_m"))
+        # 最も深いノードについては、そのノード内の点の平均値に置き換える
+        deepest_level = stats.get("max_level", 0)
+        for node in quadtree.get_all_nodes():
+            if node.level == deepest_level and len(node.points) > 0:
+                avg_point = node.aggregate_average()
+                node.points = [avg_point]
+
+        aggregated_points = []
+        for node in quadtree.get_leaf_nodes():
+            aggregated_points.extend(node.points)
+        logger.info(f"Aggregated points count: {len(aggregated_points)}")
+
 
         # 四分木の可視化画像を保存
         output_image_path = log_dir.joinpath("quadtree_visualization.png")
-        # save_quadtree_image(quadtree, output_image_path)
+        save_quadtree_image(quadtree, output_image_path)
+
+        output_path = app_home.joinpath("static/data/aggregated_data.csv")
+        with open(output_path, 'w') as f:
+            f.write("lat,lon,depth\n")
+            for p in aggregated_points:
+                f.write(f"{p['lat']},{p['lon']},{p['depth']}\n")
+        logger.info(f"Aggregated data saved to: {output_path}")
 
     #
     # 実行

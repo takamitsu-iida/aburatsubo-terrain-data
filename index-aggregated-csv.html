@@ -8,7 +8,7 @@
 
   <link rel="shortcut icon" type="image/x-icon" href="./static/site/img/favicon.ico">
 
-  <title>Quad Tree and Topojson</title>
+  <title>Bathymetric data visualization</title>
 
   <style type="text/css">
     * {
@@ -57,46 +57,53 @@
 
     #infoContainer {
       position: absolute;
-      bottom: 2%;
-      left: 2%;
+      bottom: 10px;
+      right: 100px;
       margin: 0px;
       padding: 0px;
       border: 0px;
       color: white;
       user-select: none;
       font-family: 'Roboto', sans-serif;
+      pointer-events: none;
     }
 
     #depthContainer {
-      font-size: 6rem;
+      font-size: 5rem;
     }
 
     #coordinatesContainer {
-      font-size: 4rem;
+      font-size: 2.5rem;
     }
 
     #legendContainer {
       position: absolute;
       bottom: 10px;
       right: 10px;
-      width: 80px;
-      background-color: rgba(255, 255, 255, 0.8);
+      width: 60px;
+      background-color: rgba(255, 255, 255, 1.0);
       padding: 10px;
       border-radius: 5px;
-      box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
+      font-size: 12px;
+      font-family: Arial, Helvetica, sans-serif;
+      z-index: 999;
     }
+
     .legend-item {
       display: flex;
       align-items: center;
-      margin-bottom: 5px;
+      margin-bottom: 4px;
     }
+
     .legend-color {
       width: 20px;
       height: 20px;
       margin-right: 10px;
     }
+
     .highlight {
-      outline: 2px solid red; /* 枠を描画 */
+      /* 枠を描画 */
+      outline: 2px solid red;
     }
 
     #compassContainer {
@@ -120,20 +127,63 @@
       background-size: contain;
       background-repeat: no-repeat;
       transform-origin: center;
+      pointer-events: none;
     }
 
     .landmark-label {
       position: absolute;
-      background-color: white;
+      background-color: rgba(255, 255, 255, 0.7);
       font-size: 14px;
       color: black;
       padding: 6px;
       border-radius: 3px;
       pointer-events: none;
-      transform: translateY(50%);
     }
 
-   /*
+    .scale-label {
+      position: absolute;
+      background-color: transparent;
+      font-size: 12px;
+      color: white;
+      padding: 0px;
+      pointer-events: none;
+    }
+
+    #remarks {
+      position: absolute;
+      top: 0px;
+      left: 100px;
+      margin: 0px;
+      padding: 0px;
+      border: 0px;
+      z-index: 990;
+      color: white;
+    }
+
+    #remarks a {
+      text-decoration: none;
+      color: white;
+    }
+
+    #remarks a:hover {
+      text-decoration: underline;
+    }
+
+    #debugContainer {
+      position: absolute;
+      bottom: 10px;
+      left: 10px;
+      margin: 0px;
+      padding: 0px;
+      border: 0px;
+      z-index: 999;
+      color: lightgray;
+      font-family: 'Roboto', sans-serif;
+      font-size: 12px;
+      pointer-events: none;
+    }
+
+    /*
     ネットワーク経由でデータを取得する場合にロード中を表示
     <div id="loadingContainer">
       <div id="loading"></div>
@@ -181,6 +231,29 @@
         transform: rotate(1turn)
       }
     }
+
+    /* 画面サイズが640px以下の場合 */
+    @media (max-width: 640px) {
+      #remarks {
+        display: none;
+      }
+
+      #legendContainer {
+        display: none;
+      }
+
+      #depthContainer {
+        font-size: 1.2rem;
+      }
+
+      #coordinatesContainer {
+        font-size: 1.0rem;
+      }
+
+      #debugContainer {
+        display: none;
+      }
+    }
   </style>
 
 </head>
@@ -189,6 +262,11 @@
 
   <div id="loadingContainer">
     <div id="loading"></div>
+  </div>
+
+  <div id="remarks">
+    <h1>Bathymetric Data Visualization</h1>
+    <p>bathymetric data are collected by <a href="https://deepersonar.com/" target="_blank">Deeper Sonar</a></p>
   </div>
 
   <div id="threejsContainer"></div>
@@ -205,6 +283,8 @@
     <div id="depthContainer"></div>
     <div id="coordinatesContainer"></div>
   </div>
+
+  <div id="debugContainer"></div>
 
 </body>
 
@@ -226,11 +306,30 @@
 
 <script type="module">
   import WebGL from './static/libs/capabilities/WebGL.js';
-  import { Main } from "./static/site/js/load-csv-qtree-topojson.js";
+  import { Main } from "./static/site/js/aggregated-csv.js";
 
   window.addEventListener("load", () => {
     if (WebGL.isWebGL2Available()) {
-      new Main();
+
+      const landmarks = [
+        { lon: 139.60695032, lat: 35.16200000, depth: -10, name_ja: 'ヤギ瀬', name: 'Yagise' },
+        { lon: 139.61539000, lat: 35.16160000, depth: 0, name_ja: 'みなとや', name: 'Minatoya' },
+        { lon: 139.61994200, lat: 35.16450000, depth: 0, name_ja: '小網代湾', name: 'Koamijiro' },
+        { lon: 139.61595853, lat: 35.15950000, depth: 0, name_ja: '油壷湾', name: 'Aburatsubo' },
+      ];
+
+      const params = {
+        landmarks: landmarks,  // default []
+        wireframe: false,
+        autoRotate: false,
+        showPointCloud: true,
+        showLandmarks: true,
+        showScale: true,
+        showCompass: true,
+      };
+
+      new Main(params);
+
     } else {
       document.getElementById("threejsContainer").appendChild(WebGL.getWebGLErrorMessage());
     }
