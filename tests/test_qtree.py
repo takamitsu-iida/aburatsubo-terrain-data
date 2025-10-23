@@ -121,8 +121,8 @@ def test_get_nodes_at_depth():
     for point in test_data:
         quadtree.insert(point)
 
-    nodes_at_depth_1 = quadtree.get_nodes_at_depth(1)
+    nodes_at_depth_1 = quadtree.get_nodes_at_level(1)
     assert len(nodes_at_depth_1) == 4
 
-    nodes_at_depth_2 = quadtree.get_nodes_at_depth(2)
+    nodes_at_depth_2 = quadtree.get_nodes_at_level(2)
     assert len(nodes_at_depth_2) == 16

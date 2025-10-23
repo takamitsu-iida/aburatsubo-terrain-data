@@ -2,6 +2,16 @@
 
 # 四分木を実装したスクリプトです。
 
+"""
+TODO
+
+- まとめて挿入するメソッドを作る
+
+"""
+
+
+
+
 __author__ = "takamitsu-iida"
 __version__ = "0.1"
 __date__ = "2024/10/10初版, 2025/10/22修正"
@@ -13,6 +23,7 @@ USE_FILE_HANDLER = True
 # 標準ライブラリのインポート
 #
 import logging
+import math
 import os
 import sys
 
@@ -108,13 +119,10 @@ if USE_FILE_HANDLER:
 class QuadtreeNode:
     """ 四分木のノードを表すクラス """
 
-    MAX_POINTS = 4
-    MAX_DEPTH = 10
-
-    def __init__(self, bounds: Tuple[float, float, float, float], depth: int, parent: Optional['QuadtreeNode'] = None):
+    def __init__(self, bounds: Tuple[float, float, float, float], level: int, parent: Optional['QuadtreeNode'] = None):
         # boundsは (lat1, lon1, lat2, lon2) の形式
         self.bounds: Tuple[float, float, float, float] = bounds
-        self.depth: int = depth
+        self.level: int = level
         self.points: List[Dict[str, float]] = []
         self.children: List['QuadtreeNode'] = []
         self.parent: Optional['QuadtreeNode'] = parent
@@ -136,27 +144,33 @@ class QuadtreeNode:
         #
 
         # NW
-        self.children.append(QuadtreeNode((lat1, lon1, mid_lat, mid_lon), self.depth + 1, self))
+        self.children.append(QuadtreeNode((lat1, lon1, mid_lat, mid_lon), self.level + 1, self))
         # NE
-        self.children.append(QuadtreeNode((lat1, mid_lon, mid_lat, lon2), self.depth + 1, self))
+        self.children.append(QuadtreeNode((lat1, mid_lon, mid_lat, lon2), self.level + 1, self))
         # SW
-        self.children.append(QuadtreeNode((mid_lat, lon1, lat2, mid_lon), self.depth + 1, self))
+        self.children.append(QuadtreeNode((mid_lat, lon1, lat2, mid_lon), self.level + 1, self))
         # SE
-        self.children.append(QuadtreeNode((mid_lat, mid_lon, lat2, lon2), self.depth + 1, self))
+        self.children.append(QuadtreeNode((mid_lat, mid_lon, lat2, lon2), self.level + 1, self))
 
 
     def insert(self, point: Dict[str, float]) -> bool:
         """ ノードにポイントを挿入 """
+
+        # 渡されたデータが範囲内かどうかを確認して、範囲外ならFalseを返す
         if not self.contains(point):
             return False
 
+        # リーフノードの場合
         if self.is_leaf():
-            if len(self.points) < QuadtreeNode.MAX_POINTS or self.depth >= QuadtreeNode.MAX_DEPTH:
+            # ポイント数が上限以下、または分割レベルが上限に達している場合は、points配列に追加して終了
+            if len(self.points) < Quadtree.MAX_POINTS or self.level >= Quadtree.LEVEL_LIMIT:
                 self.points.append(point)
                 return True
             else:
+                # それ以外の場合はノードを分割
                 self.subdivide()
 
+        # 子ノードのどれかに挿入
         for child in self.children:
             if child.insert(point):
                 return True
@@ -199,14 +213,14 @@ class QuadtreeNode:
         r_lat1, r_lon1, r_lat2, r_lon2 = range
         return r_lat1 <= point['lat'] < r_lat2 and r_lon1 <= point['lon'] < r_lon2
 
-    def get_nodes_at_depth(self, depth: int) -> List['QuadtreeNode']:
+    def get_nodes_at_level(self, level: int) -> List['QuadtreeNode']:
         """ 指定された深さのノードを取得 """
         nodes = []
-        if self.depth == depth:
+        if self.level == level:
             nodes.append(self)
-        elif self.depth < depth:
+        elif self.level < level:
             for child in self.children:
-                nodes.extend(child.get_nodes_at_depth(depth))
+                nodes.extend(child.get_nodes_at_level(level))
         return nodes
 
 
@@ -225,8 +239,39 @@ class Quadtree:
 
     """ 四分木クラス """
 
+    LEVEL_LIMIT = 1  # 最大分割レベル（初期値、後で設定される）
+    MIN_GRID_WIDTH = 3.0  # 単位メートル
+
+    MAX_POINTS = 4
+
+
     def __init__(self, bounds: Tuple[float, float, float, float]):
         self.root = QuadtreeNode(bounds, 0)
+        # boundsは (lat1, lon1, lat2, lon2) の形式
+
+        # boundsの大きさ（緯度・経度の差）をメートルに変換
+        lat1, lon1, lat2, lon2 = bounds
+
+        # 南西→北西（緯度方向の距離）
+        height_m = distance((lat1, lon1), (lat2, lon1)).meters
+
+        # 南西→南東（経度方向の距離）
+        width_m = distance((lat1, lon1), (lat1, lon2)).meters
+
+        # 最大辺を基準に分割階層を決定
+        square_length = max(height_m, width_m)
+
+        # 2進法で分割していくので、LEVEL_LIMITは log2(max_length / MIN_GRID_WIDTH) の切り上げ
+        if square_length > 0 and self.MIN_GRID_WIDTH > 0:
+            Quadtree.LEVEL_LIMIT = int(math.ceil(math.log2(square_length / self.MIN_GRID_WIDTH)))
+        else:
+            Quadtree.LEVEL_LIMIT = 1  # デフォルト値
+
+
+        logger.info(f"Quadtree initialized with LEVEL_LIMIT={Quadtree.LEVEL_LIMIT} (square_length={square_length:.2f} m)")
+
+
+
 
 
     def insert(self, point: Dict[str, float]) -> bool:
@@ -237,8 +282,8 @@ class Quadtree:
         return self.root.query(range)
 
 
-    def get_nodes_at_depth(self, depth: int) -> List[QuadtreeNode]:
-        return self.root.get_nodes_at_depth(depth)
+    def get_nodes_at_level(self, level: int) -> List[QuadtreeNode]:
+        return self.root.get_nodes_at_level(level)
 
 
     def get_leaf_nodes(self) -> List[QuadtreeNode]:
@@ -250,7 +295,9 @@ class Quadtree:
         - 総ノード数
         - 葉ノード数
         - 最大深さ
-        - 各葉ノードの点数の最大・最小・平均
+        - 最大深さのノード数
+        - 各葉ノードの点数の最大値
+        - 最も深いレベルのノードの一辺の長さ（メートル）
         """
         all_nodes = []
         def collect_nodes(node):
@@ -261,25 +308,31 @@ class Quadtree:
 
         leaf_nodes = self.get_leaf_nodes()
         leaf_points_counts = [len(node.points) for node in leaf_nodes]
-        max_depth = max(node.depth for node in all_nodes)
+        max_level = max(node.level for node in leaf_nodes) if leaf_nodes else 0
 
-        # tabulateで統計情報を表示する
-        table = [
-            ["total_nodes", int(len(all_nodes))],
-            ["leaf_nodes", int(len(leaf_nodes))],
-            ["max_depth", int(max_depth)],
-            ["leaf_points_max", int(max(leaf_points_counts)) if leaf_points_counts else 0],
-            ["leaf_points_min", int(min(leaf_points_counts)) if leaf_points_counts else 0]
-        ]
-        headers = ["", "value"]
-        logger.info(f"Quadtree stats\n{tabulate(table, headers=headers, floatfmt='.0f', numalign='right')}")
+        # 最も深いレベルのノードの一辺の長さをメートルで求める
+        deepest_nodes = [node for node in leaf_nodes if node.level == max_level]
+
+        logger.info(f"Deepest level: {max_level}, Number of deepest nodes: {len(deepest_nodes)}")
+
+        if deepest_nodes:
+            node = deepest_nodes[0]
+            lat1, lon1, lat2, lon2 = node.bounds
+            height_m = distance((lat1, lon1), (lat2, lon1)).meters
+            width_m = distance((lat1, lon1), (lat1, lon2)).meters
+            deepest_node_size = max(height_m, width_m)
+        else:
+            deepest_node_size = 0.0
+
+        logger.info(f"Deepest node size: {deepest_node_size:.3f} m")
 
         return {
             "total_nodes": len(all_nodes),
             "leaf_nodes": len(leaf_nodes),
-            "max_depth": max_depth,
+            "max_level": max_level,
+            "deepest_nodes_count": len(deepest_nodes),
             "leaf_points_max": max(leaf_points_counts) if leaf_points_counts else 0,
-            "leaf_points_min": min(leaf_points_counts) if leaf_points_counts else 0
+            "deepest_node_size_m": deepest_node_size
         }
 
 
@@ -453,7 +506,18 @@ if __name__ == '__main__':
         # min  35.157248  139.598684   1.082000
         # max  35.173733  139.621782  47.539000
 
-        bounds = (data_stats['lat']['min'], data_stats['lon']['min'], data_stats['lat']['max'], data_stats['lon']['max'])
+        # 中央座標を求める
+        mid_lat = (data_stats['lat']['min'] + data_stats['lat']['max']) / 2
+        mid_lon = (data_stats['lon']['min'] + data_stats['lon']['max']) / 2
+
+        # 四分木の境界を正方形で設定
+        square_size = max(
+            mid_lat - data_stats['lat']['min'],
+            data_stats['lat']['max'] - mid_lat,
+            mid_lon - data_stats['lon']['min'],
+            data_stats['lon']['max'] - mid_lon
+        )
+        bounds = (mid_lat - square_size, mid_lon - square_size, mid_lat + square_size, mid_lon + square_size)
         quadtree = Quadtree(bounds)
 
         for row in data:
@@ -461,9 +525,26 @@ if __name__ == '__main__':
             point = {'lat': lat, 'lon': lon, 'depth': depth}
             quadtree.insert(point)
 
-        quadtree.stats()
+        # 四分木の統計情報を取得
+        stats = quadtree.stats()
+
+        # tabulateで四分木の統計情報を表示する
+        table = [
+            ["total_nodes", stats.get("total_nodes", 0)],
+            ["leaf_nodes", stats.get("leaf_nodes", 0)],
+            ["max_level", stats.get("max_level", 0)],
+            ["deepest_nodes_count", stats.get("deepest_nodes_count", 0)],
+            ["leaf_points_max", stats.get("leaf_points_max", 0)],
+            ["deepest_node_size(m)", f"{stats.get('deepest_node_size_m', 0):.3f}"]
+        ]
+        headers = ["", "value"]
+        logger.info(f"Quadtree stats\n{tabulate(table, headers=headers, numalign='right')}")
+
+        logger.info(stats.get("deepest_node_size_m"))
+
+        # 四分木の可視化画像を保存
         output_image_path = log_dir.joinpath("quadtree_visualization.png")
-        save_quadtree_image(quadtree, output_image_path)
+        # save_quadtree_image(quadtree, output_image_path)
 
     #
     # 実行
