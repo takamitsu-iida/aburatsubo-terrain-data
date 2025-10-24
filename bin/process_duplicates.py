@@ -197,9 +197,11 @@ if __name__ == '__main__':
         logger.info(f"describe() --- 削除後\n{df.describe().to_markdown()}\n")
 
         # 重複削除後のデータをCSVファイルとして保存
-        df.to_csv(output_file_path, index=False)
-
-        logger.info(f"重複削除後のデータを保存しました: {output_filename}")
+        try:
+            df.to_csv(output_file_path, index=False)
+            logger.info(f"重複削除後のデータを保存しました: {output_filename}")
+        except Exception as e:
+            logger.error(f"CSVファイルの保存に失敗しました：{str(e)}")
 
     #
     # 実行

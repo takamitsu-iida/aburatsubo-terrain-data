@@ -9,9 +9,12 @@ INPUT_DATA_BASENAME = $(basename $(INPUT_DATA_FILENAME))
 dedup: ## 重複する座標データを削除して新しいCSVファイルを作成する
 	@python3 bin/process_duplicates.py --input $(INPUT_DATA_FILENAME) --output $(INPUT_DATA_BASENAME)_dedup.csv
 
+outliers: ## 外れ値を検出して新しいCSVファイルを作成する
+	@python3 bin/process_outliers.py --input $(INPUT_DATA_BASENAME)_dedup.csv --output $(INPUT_DATA_BASENAME)_dedup_outliers.csv
+
 image: ## 散布図を作成する
 	@python3 bin/draw_scatter.py --input $(INPUT_DATA_BASENAME)_dedup.csv --title "Deduplicated Data Scatter Plot"
-
+	@python3 bin/draw_scatter.py --input $(INPUT_DATA_BASENAME)_dedup_outliers.csv --title "Outlier removed Data Scatter Plot"
 
 clean: ## データファイルを削除する
 	@rm -f data/data_dedup.csv

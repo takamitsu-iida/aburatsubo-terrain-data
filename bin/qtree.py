@@ -2,19 +2,6 @@
 
 # 四分木を実装したスクリプトです。
 
-"""
-TODO
-
-- まとめて挿入するメソッドを作る
-
-"""
-
-
-
-
-__author__ = "takamitsu-iida"
-__version__ = "0.1"
-__date__ = "2024/10/10初版, 2025/10/22修正"
 
 # ログをファイルにも出力するかどうか
 USE_FILE_HANDLER = True
@@ -424,9 +411,6 @@ def read_csv(filepath) -> Tuple[List[List[float]], Dict[str, Dict[str, float]]]:
     logger.info(f"data stats\n{tabulate(table, headers=headers, floatfmt='.6f')}")
 
     return data, stats
-
-
-
 
 
 def save_quadtree_image(
