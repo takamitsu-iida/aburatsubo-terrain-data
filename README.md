@@ -2,6 +2,8 @@
 
 <br>
 
+CSVデータをダウンロードする場合のリンク
+
 https://takamitsu-iida.github.io/aburatsubo-terrain-data/data/data.csv
 
 
@@ -13,15 +15,15 @@ binディレクトリにスクリプトを配置。
 
 testsディレクトリにテスト用スクリプトを配置。
 
-binディレクトリにあるスクリプトを外部からimportするには、
-PYTHONPATHの設定が必要。
+binディレクトリにあるスクリプトを外部からimportするにはPYTHONPATHの設定が必要。
+
 vscodeは .env ファイルがあればそれを読み取るので、以下のように設定する。
 
 ```bash
 PYTHONPATH=bin
 ```
 
-あとはvenvで仮想環境を整える。
+venvで仮想環境を整える。
 
 ```bash
 python3 -m venv .venv
@@ -38,6 +40,8 @@ Deeperの地図アプリからCSV形式でデータをダウンロードする�
 https://maps.fishdeeper.com/ja-jp
 
 ~~ファイル名は共通で `bathymetry_data.csv` となっている。~~
+
+<br>
 
 > [!NOTE]
 >
@@ -170,29 +174,6 @@ CSVから読み取った状態での散布図。左上に異常値が存在す�
 | 75%   |     35.1649     |    139.61       |     21.928   |
 | max   |     35.1737     |    139.622      |     47.539   |
 
-
-<br><br>
-
-## 実行環境メモ
-
-データの加工にPythonを使うので、venvを使ってPython仮想環境をセットアップする。
-
-```bash
-python3 -m venv .venv
-```
-
-シェル利用時にPython仮想環境を自動切換えするために`direnv`を利用する。
-
-```bash
-direnv edit .
-```
-
-エディタが開くので、以下の内容を追加して保存する。
-
-```text
-source .venv/bin/activate
-unset PS1
-```
 
 <br><br>
 
@@ -376,7 +357,7 @@ Successfully installed rtree-1.3.0
 >
 
 
-
+<br>
 
 ### jupyter notebook
 
@@ -471,60 +452,4 @@ fi
 nohup jupyter-notebook --config $CURRENT_DIR/jupyter_notebook_config.py --notebook-dir $CURRENT_DIR >> $CURRENT_DIR/log/jupyter.log 2>&1 &
 echo "Jupyter Notebook started. Check log/jupyter.log for details."
 echo "You can access the notebook at http://localhost:8888"
-```
-
-<br><br><br><br>
-
-## Goコードの断片（あとで消す）
-
-
-```go
-func Round(x, unit float64) float64 {
-    return math.Round(x/unit) * unit
-}
-```
-
-```go
-package main
-
- import (
- 	"fmt"
- 	"math"
- )
-
- type Coordinates struct {
- 	Latitude  float64
- 	Longitude float64
- }
-
- const radius = 6371 // Earth's mean radius in kilometers
-
- func degrees2radians(degrees float64) float64 {
- 	return degrees * math.Pi / 180
- }
-
- func (origin Coordinates) Distance(destination Coordinates) float64 {
- 	degreesLat := degrees2radians(destination.Latitude - origin.Latitude)
- 	degreesLong := degrees2radians(destination.Longitude - origin.Longitude)
- 	a := (math.Sin(degreesLat/2)*math.Sin(degreesLat/2) +
- 		math.Cos(degrees2radians(origin.Latitude))*
- 			math.Cos(degrees2radians(destination.Latitude))*math.Sin(degreesLong/2)*
- 			math.Sin(degreesLong/2))
- 	c := 2 * math.Atan2(math.Sqrt(a), math.Sqrt(1-a))
- 	d := radius * c
-
- 	return d
- }
-
- func main() {
- 	pointA := Coordinates{2.990353, 101.533913}
- 	pointB := Coordinates{2.960148, 101.577888}
-
- 	fmt.Println("Point A : ", pointA)
- 	fmt.Println("Point B : ", pointB)
-
- 	distance := pointA.Distance(pointB)
- 	fmt.Printf("The distance from point A to point B is %.2f kilometers.\n", distance)
-
- }
 ```

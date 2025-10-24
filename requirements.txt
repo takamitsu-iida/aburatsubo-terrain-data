@@ -4,11 +4,13 @@ matplotlib
 pandas
 scipy
 scikit-learn
-open3d
+
 rtree
+
+# for Jupyter Notebook
 jupyter
 
-# for tabular data display
+# to_markdown() require tabulate
 tabulate
 
 # for geocoding

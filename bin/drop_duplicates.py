@@ -11,6 +11,9 @@ __author__ = "takamitsu-iida"
 __version__ = "0.1"
 __date__ = "2022/08/19初版, 2025/10/23更新"
 
+# スクリプトを引数無しで実行したときのヘルプに使うデスクリプション
+SCRIPT_DESCRIPTION = 'drop duplicate coordinates from Deeper GPS data'
+
 #
 # 標準ライブラリのインポート
 #
@@ -23,6 +26,10 @@ import sys
 
 from pathlib import Path
 
+# WSL1 固有の numpy 警告を抑制
+# https://github.com/numpy/numpy/issues/18900
+import warnings
+warnings.filterwarnings(action="ignore", category=UserWarning, module=r"numpy.*", message=r"Signature b")
 
 # このファイルへのPathオブジェクト
 app_path = Path(__file__)
@@ -168,58 +175,6 @@ def round_unit(x: float, unit: float) -> float:
     return round(x / unit) * unit
 
 
-import numpy as np
-
-def snap_to_one_meter_grid(latitude, longitude):
-    """
-    GPS座標を概算で1m単位のグリッドに吸着させる関数。
-
-    精度を優先しないため、特定の緯度（例：北緯35度付近）での
-    緯度・経度の概算のメートル距離を使用する。
-
-    概算値:
-    - 緯度1度あたり：約 111,000 メートル
-    - 経度1度あたり（北緯35度付近）：約 91,287 メートル
-    """
-
-    # 概算の変換係数 (1度あたりのメートル数)
-    # 緯度方向 (北緯・南緯に関わらずほぼ一定): 約111,000 m/度
-    METERS_PER_DEG_LAT = 111000.0
-
-    # 経度方向 (緯度によって変化する。ここでは北緯35度付近を想定): 約91,287 m/度
-    # 経度1度あたりの距離 = 111,320 * cos(緯度)
-    # 例：cos(35度) * 111,320 ≈ 91,287
-    METERS_PER_DEG_LON = 91287.0
-
-    # --- 1. メートル単位の座標に変換 (基準点からの相対距離として扱う) ---
-
-    # 非常に大きな値になるのを避けるため、適当な「原点」を設定して相対距離を計算します。
-    # ここでは、座標自体を相対値として使い、メートルに変換します。
-
-    # 緯度をメートルに変換
-    y_meters = latitude * METERS_PER_DEG_LAT
-
-    # 経度をメートルに変換
-    x_meters = longitude * METERS_PER_DEG_LON
-
-    # --- 2. 1m単位で丸める (グリッドへの吸着) ---
-
-    # メートル座標を最も近い整数値 (1m単位) に丸める
-    snapped_x_meters = np.round(x_meters)
-    snapped_y_meters = np.round(y_meters)
-
-    # --- 3. 再度、緯度・経度に逆変換 ---
-
-    # 丸めたメートル座標を元の緯度・経度に戻す
-    snapped_latitude = snapped_y_meters / METERS_PER_DEG_LAT
-    snapped_longitude = snapped_x_meters / METERS_PER_DEG_LON
-
-    return snapped_latitude, snapped_longitude
-
-
-
-
-
 if __name__ == '__main__':
 
     def rbf_example():
@@ -321,17 +276,24 @@ if __name__ == '__main__':
         except:
             return None
 
+
     def print_summary(df: pd.DataFrame):
+
+
         print("head")
         print(df.head(3))
         print("")
+
         print("tail")
         print(df.tail(3))
         print("")
+
         print("describe")
+
         # to_markdown() requires tabulate module
         print(df.describe().to_markdown())
         print("")
+
 
     def save_scatter(df: pd.DataFrame, title="", filename="") -> None:
         if not filename:
@@ -343,27 +305,15 @@ if __name__ == '__main__':
         plt.savefig(os.path.join(img_dir, filename))
         plt.clf()
 
+
     def process_duplicated(df: pd.DataFrame):
-        dfx = df[["lat", "lon", "depth"]]
+        """
+        (lat, lon)が重複した行については、depthの平均値を取り、(lat, lon, depth)で1行だけ残す。
+        """
+        # groupbyで(lat, lon)ごとにdepthの平均を計算
+        df_agg = df.groupby(['lat', 'lon'], as_index=False)['depth'].mean()
+        return df_agg
 
-        # keep=Falseにすると重複行は全て削除。デフォルトはkeep='first'
-        dfx_uniq = df.drop_duplicates(subset=["lat", "lon"], keep=False)
-        print("unique coordinate")
-        print(dfx_uniq.describe().to_markdown())
-        print("")
-
-        dfx_duplicated = dfx.groupby(["lat", "lon"])[
-            "depth"].mean().reset_index()
-        print("duplicated coordinate")
-        print(dfx_duplicated.describe().to_markdown())
-        print("")
-
-        df = pd.concat([dfx_uniq, dfx_duplicated]).reset_index(drop=True)
-        print("combined data frame")
-        print(df.describe().to_markdown())
-        print("")
-
-        return df
 
     def process_outlier(df: pd.DataFrame):
 
@@ -402,17 +352,33 @@ if __name__ == '__main__':
 
         return df
 
-    def main():
+    def main() -> None:
+        # 引数処理
+        parser = argparse.ArgumentParser(description=SCRIPT_DESCRIPTION)
+        parser.add_argument('--input', type=str, required=True, help='dataディレクトリ直下のCSVファイル名')
+        args = parser.parse_args()
 
-        # オリジナルデータをファイルから読む
+        # 引数が何も指定されていない場合はhelpを表示して終了
+        if not any(vars(args).values()):
+            parser.print_help()
+            return
 
-        # 古いデータはこれ
-        # filename = "bathymetry_data.csv"
+        input_file_path = Path(data_dir, args.input)
+        if not input_file_path.exists():
+            logger.error(f"入力ファイルが存在しません: {input_file_path}")
+            return
 
-        # 新しいデータはこのファイル
-        filename = "ALL_depth_map_data_202408.csv"
-        file_path = os.path.join(data_dir, filename)
-        df = load_csv(file_path)
+        # 拡張子を除いた名前
+        input_basename = input_file_path.stem
+
+        # 出力ファイル名は入力ファイル名に_dedupを付加したものとする
+        output_filename = f"{input_basename}_dedup.csv"
+
+        # 出力先のファイルパス
+        output_file_path = Path(data_dir, output_filename)
+
+        # CSVファイルをPandasのデータフレームとして読み込む
+        df = pd.read_csv(input_file_path, header=None)
 
         # CSVファイルには列名がないので、データフレームに列名を定義
         df.columns = ["lat", "lon", "depth", "time"]
@@ -424,46 +390,20 @@ if __name__ == '__main__':
         print("original data")
         print_summary(df)
 
-        # オリジナルデータの散布図を保存
-        save_scatter(df, title="original data", filename="scatter_01.png")
-
-        # 座標を1m単位に吸着させる
-        stats = Stats(df)
-        df = align_coord(df, stats)
-        print("align coord")
-        print(df.describe().to_markdown())
-        print("")
-
         # 重複した座標のデータを削除する
         df = process_duplicated(df)
 
-        # 重複を削除した状態の散布図を保存
-        save_scatter(df, title="drop duplicated", filename="scatter_02.png")
+        # 重複を削除した状態で散布図を保存
+        save_scatter(df, title="drop duplicated", filename=f"{input_basename}_scatter_01.png")
 
-        # 外れ値を除く処理を施す
-        pred = process_outlier(df)
+        logger.info("After dropping duplicates, number of data points: {}".format(len(df)))
+        logger.info(f"\n{df.describe().to_markdown()}")
 
-        # 外れ値データの散布図を保存
-        outlier = df.iloc[np.where(pred < 0)]
-        save_scatter(outlier, title="outlier", filename="scatter_03.png")
-
-        # dfを外れ値データを除いたデータに置き換える
-        df = df.iloc[np.where(pred > 0)]
-        save_scatter(df, title="drop outlier", filename="scatter_04.png")
-
-        # 重複した座標のデータを削除する
-        df = process_duplicated(df)
+        # 重複削除後のデータをCSVファイルとして保存
+        df.to_csv(output_file_path, index=False)
 
 
-        print("final data")
-        print(df.describe().to_markdown())
-
-        # CSVファイルに保存、ファイル名はdata.csvで固定
-        # 外部からみたこのファイルのURLはこれ
-        # https://takamitsu-iida.github.io/aburatsubo-terrain-data/data/data.csv
-        df.to_csv(os.path.join(data_dir, "data.csv"), index=False)
-
-        return 0
-
+    #
     # 実行
-    sys.exit(main())
+    #
+    main()

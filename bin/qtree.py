@@ -32,7 +32,6 @@ from typing import List, Tuple, Optional, Dict, Any
 
 # WSL1 固有の numpy 警告を抑制
 # https://github.com/numpy/numpy/issues/18900
-
 import warnings
 warnings.filterwarnings(action="ignore", category=UserWarning, module=r"numpy.*", message=r"Signature b")
 
@@ -251,7 +250,8 @@ class Quadtree:
     """ 四分木クラス """
 
     LEVEL_LIMIT = 1  # 最大分割レベル（初期値、後で設定される）
-    MIN_GRID_WIDTH = 3.0  # 単位メートル
+
+    MIN_GRID_WIDTH = 2.0  # 単位メートル
 
     MAX_POINTS = 4
 
@@ -275,9 +275,6 @@ class Quadtree:
         # 2進法で分割していくので、LEVEL_LIMITは log2(max_length / MIN_GRID_WIDTH) の切り上げ
         if square_length > 0 and self.MIN_GRID_WIDTH > 0:
             Quadtree.LEVEL_LIMIT = int(math.ceil(math.log2(square_length / self.MIN_GRID_WIDTH)))
-        else:
-            Quadtree.LEVEL_LIMIT = 1  # デフォルト値
-
 
         logger.info(f"Quadtree initialized with LEVEL_LIMIT={Quadtree.LEVEL_LIMIT} (square_length={square_length:.2f} m)")
 
@@ -558,8 +555,8 @@ if __name__ == '__main__':
 
         # 最も深いノードについては、そのノード内の点の平均値に置き換える
         deepest_level = stats.get("max_level", 0)
-        for node in quadtree.get_all_nodes():
-            if node.level == deepest_level and len(node.points) > 0:
+        for node in quadtree.get_leaf_nodes():
+            if node.level == deepest_level and len(node.points) > 1:
                 avg_point = node.aggregate_average()
                 node.points = [avg_point]
 
