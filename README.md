@@ -226,10 +226,22 @@ groupbyで集約しつつ、水深の平均を計算してそれに置き換え�
 
 Local Outlier Factor（局所外れ値因子法）を利用する。
 
+LOFの考え方
+
+- 自分を中心に円を書き、k個の近傍点が入るように円を拡大していく。
+
+- 円に入ったk個の点それぞれにつき、同じように円を書き、k個の近傍点が入るように円を拡大していく
+
+- 自分の円を含め、合計1+k個の円ができる
+
+- その円の大きさが、やたら大きい場合は異常値なのではないか、と推測する
+
 LOFの手順
 
 1. 到達可能性距離（Reachability Distance）の計算
+
 2. 局所到達可能性密度（Local Reachability Density）の計算
+
 3. LOF（Local Outlier Factor）の計算
 
 
@@ -244,10 +256,18 @@ LOFの手順
 
 ```
 
+k=2の場合、
+
 - aを取り出す。
-- aの隣接ノードbを取り出す。
-- bからK番目に近い点を取り出す。この場合はdを取り出す。
-- a-b間の距離とb-d間の距離の大きい方を取り出したものが `reachability_disktance_k(a,b)` となっている
+- aから一番近い隣接ノードbを取り出す
+- bからk番目に近い点を取り出す。この場合はdを取り出す
+- a-b間の距離とb-d間の距離の大きい方を取り出したものが `reachability_disktance_k(a,b)` となる
+- aから二番目に近い隣接ノードcを取り出す
+- cからk番目に近い点を取り出す、以下同様
+
+自分を含めると1+k個の到達可能性距離を求めることになる
+
+<br>
 
 ### 局所到達可能性密度（Local Reachability Density）
 
@@ -274,10 +294,15 @@ LOFの手順
 
 これが大きいほど、異常値と考えられる。
 
+<br>
 
 ### scikit-learnによるLOF
 
-scikit-learnのLocalOutlierFactorを使うと簡単に計算できる。
+自分で計算すると、k個の近傍点を取り出すところが難しい。
+
+scikit-learnに実装されているLocalOutlierFactorを使うと簡単に計算できる。
+
+
 
 ```python
 from sklearn.neighbors import LocalOutlierFactor  # process_outlier()
