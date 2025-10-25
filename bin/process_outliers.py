@@ -317,7 +317,7 @@ if __name__ == '__main__':
         logger.info(f"describe() --- 水深の外れ値を削除後\n{df.describe().to_markdown()}\n")
 
         #
-        # メディアンフィルタで深度の異常値を修正する
+        # メディアンフィルタで深さを滑らかにする（異常値を修正する）
         #
         median_filter_outlier(df, radius_m=5.0)
         logger.info(f"describe() --- メディアンフィルタ適用後\n{df.describe().to_markdown()}\n")
