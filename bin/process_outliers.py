@@ -35,6 +35,9 @@ try:
     from sklearn.ensemble import IsolationForest
     from sklearn.neighbors import NearestNeighbors
 
+    # KDTreeを使って高速に近傍点を探索する
+    from scipy.spatial import cKDTree
+
 except ImportError as e:
     logging.error("必要なモジュールがインストールされていません。pandasおよびscikit-learnをインストールしてください。")
     sys.exit(1)
@@ -205,7 +208,7 @@ def isolation_forest(df: pd.DataFrame, features: list = ["lat", "lon"]) -> np.nd
     return predicted
 
 
-def spatial_depth_outlier(df, k=20, z_thresh=3.0):
+def spatial_depth_outlier(df, k=30, z_thresh=3.0):
     """
     (lat, lon)で近傍点を探し、そのdepth分布から外れ値を判定
 
@@ -231,6 +234,36 @@ def spatial_depth_outlier(df, k=20, z_thresh=3.0):
 
     return outlier_mask
 
+
+
+def median_filter_outlier(df: pd.DataFrame, radius_m: float = 5.0) -> None:
+    """
+    メディアンフィルタで深度の異常値を修正する(平準化する)
+    radius_m: 近傍探索の半径（メートル単位）
+    """
+
+    # 緯度・経度をメートル座標に変換
+    # TODO:
+    # 緯度によって変化するので、厳密には各点ごとに計算するべき
+    METERS_PER_DEG_LAT = 111000.0
+    METERS_PER_DEG_LON = 91287.0  # 北緯35度付近
+
+    x = df['lon'].values * METERS_PER_DEG_LON
+    y = df['lat'].values * METERS_PER_DEG_LAT
+    coords = np.column_stack([x, y])
+
+    # KD-Treeを構築
+    tree = cKDTree(coords)
+
+    # depth列を直接置き換える
+    new_depths = np.empty(len(df))
+    for i in range(len(df)):
+        neighbor_indices = tree.query_ball_point(coords[i], r=radius_m)
+        neighbor_depths = df.loc[neighbor_indices, 'depth']
+        median_val = np.median(neighbor_depths)
+        new_depths[i] = median_val
+
+    df['depth'] = new_depths
 
 
 if __name__ == '__main__':
@@ -283,7 +316,15 @@ if __name__ == '__main__':
 
         logger.info(f"describe() --- 水深の外れ値を削除後\n{df.describe().to_markdown()}\n")
 
-        # 外れ値を除去したデータフレームをCSVファイルに保存する
+        #
+        # メディアンフィルタで深度の異常値を修正する
+        #
+        median_filter_outlier(df, radius_m=5.0)
+        logger.info(f"describe() --- メディアンフィルタ適用後\n{df.describe().to_markdown()}\n")
+
+        #
+        # 修正したデータフレームをCSVファイルに保存する
+        #
         try:
             df.to_csv(output_file_path, index=False)
             logger.info(f"外れ値を除去したデータフレームを保存しました: {output_filename}")
