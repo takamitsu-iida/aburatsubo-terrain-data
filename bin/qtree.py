@@ -49,6 +49,10 @@ app_home = app_path.parent.joinpath('..').resolve()
 # ディレクトリ
 data_dir = app_home.joinpath("data")
 
+# 出力画像ファイルを保存するディレクトリ
+image_dir = app_home.joinpath("img")
+image_dir.mkdir(exist_ok=True)
+
 #
 # ログ設定
 #
@@ -113,9 +117,19 @@ class QuadtreeNode:
         self.children: List['QuadtreeNode'] = []
         self.parent: Optional['QuadtreeNode'] = parent
 
+        self.center: Tuple[float, float] = (
+            (bounds[0] + bounds[2]) / 2,
+            (bounds[1] + bounds[3]) / 2
+        )
+
+        self.lat_length: float = abs(bounds[2] - bounds[0])
+        self.lon_length: float = abs(bounds[3] - bounds[1])
+
+
     def is_leaf(self) -> bool:
         """ ノードが葉ノードかどうかを判定 """
         return len(self.children) == 0
+
 
     def subdivide(self):
         """ ノードを4つの子ノードに分割 """
@@ -199,6 +213,7 @@ class QuadtreeNode:
         r_lat1, r_lon1, r_lat2, r_lon2 = range
         return r_lat1 <= point['lat'] < r_lat2 and r_lon1 <= point['lon'] < r_lon2
 
+
     def get_nodes_at_level(self, level: int) -> List['QuadtreeNode']:
         """ 指定された深さのノードを取得 """
         nodes = []
@@ -221,7 +236,7 @@ class QuadtreeNode:
             return leaf_nodes
 
 
-    def aggregate_average(self) -> Dict[str, float]:
+    def average(self) -> Dict[str, float]:
         """ ノード内のポイントの平均値を計算 """
         n = len(self.points)
         if n == 0:
@@ -244,7 +259,10 @@ class Quadtree:
 
 
     def __init__(self, bounds: Tuple[float, float, float, float]):
+
+        # ルートノードを作成
         self.root = QuadtreeNode(bounds, 0)
+
         # boundsは (lat1, lon1, lat2, lon2) の形式
 
         # boundsの大きさ（緯度・経度の差）をメートルに変換
@@ -291,11 +309,43 @@ class Quadtree:
     def get_leaf_nodes(self) -> List[QuadtreeNode]:
         return self.root.get_leaf_nodes()
 
-    def stats(self) -> Dict[str, Any]:
+
+    def get_empty_leaf_nodes(self) -> List[QuadtreeNode]:
+        """ 点が一つも含まれていない葉ノードを取得 """
+        leaf_nodes = self.get_leaf_nodes()
+        return [node for node in leaf_nodes if len(node.points) == 0]
+
+
+    def get_nonempty_leaf_nodes(self) -> List[QuadtreeNode]:
+        """ ポイントデータが一つ以上格納されているリーフノードを取得 """
+        return [node for node in self.get_leaf_nodes() if len(node.points) > 0]
+
+
+    def get_leaf_node_by_point(self, lat: float, lon: float) -> Optional[QuadtreeNode]:
+        """
+        Quadtreeのルートから辿って、指定座標 (lat, lon) を含む葉ノードを返す
+        """
+        node = self.root
+        point = {'lat': lat, 'lon': lon}
+        while not node.is_leaf():
+            found = False
+            for child in node.children:
+                if child.contains(point):
+                    node = child
+                    found = True
+                    break
+            if not found:
+                return None  # 該当ノードなし
+        return node
+
+
+    def get_stats(self) -> Dict[str, Any]:
         """
         四分木の統計情報を返す
         - 総ノード数
-        - 葉ノード数
+        - 葉ノードの総数
+        - データのない葉ノード数
+        - データのある葉ノード数
         - 最大深さ
         - 最大深さのノード数
         - 各葉ノードの点数の最大値
@@ -315,8 +365,6 @@ class Quadtree:
         # 最も深いレベルのノードの一辺の長さをメートルで求める
         deepest_nodes = [node for node in leaf_nodes if node.level == max_level]
 
-        logger.info(f"Deepest level: {max_level}, Number of deepest nodes: {len(deepest_nodes)}")
-
         if deepest_nodes:
             node = deepest_nodes[0]
             lat1, lon1, lat2, lon2 = node.bounds
@@ -326,16 +374,34 @@ class Quadtree:
         else:
             deepest_node_size = 0.0
 
-        logger.info(f"Deepest node size: {deepest_node_size:.3f} m")
-
         return {
             "total_nodes": len(all_nodes),
             "leaf_nodes": len(leaf_nodes),
+            "empty_leaf_nodes": len([node for node in leaf_nodes if len(node.points) == 0]),
+            "nonempty_leaf_nodes": len([node for node in leaf_nodes if len(node.points) > 0]),
             "max_level": max_level,
             "deepest_nodes_count": len(deepest_nodes),
             "leaf_points_max": max(leaf_points_counts) if leaf_points_counts else 0,
             "deepest_node_size_m": deepest_node_size
         }
+
+
+    def get_stats_text(self):
+        stats = self.get_stats()
+
+        table = [
+            ["total_nodes", stats.get("total_nodes", 0)],
+            ["leaf_nodes", stats.get("leaf_nodes", 0)],
+            ["empty_leaf_nodes", stats.get("empty_leaf_nodes", 0)],
+            ["nonempty_leaf_nodes", stats.get("nonempty_leaf_nodes", 0)],
+            ["max_level", stats.get("max_level", 0)],
+            ["deepest_nodes_count", stats.get("deepest_nodes_count", 0)],
+            ["leaf_points_max", stats.get("leaf_points_max", 0)],
+            ["deepest_node_size(m)", f"{stats.get('deepest_node_size_m', 0):.3f}"]
+        ]
+        headers = ["", "value"]
+
+        return tabulate(table, headers=headers, numalign='right')
 
 
 def get_latlon_delta(lat: float, lon: float, meters: float = 1.0) -> tuple[float, float]:
@@ -408,7 +474,7 @@ def read_csv(filepath) -> Tuple[List[List[float]], Dict[str, Dict[str, float]]]:
         ["max", stats['lat']['max'], stats['lon']['max'], stats['depth']['max']],
     ]
     headers = ["", "lat", "lon", "depth"]
-    logger.info(f"data stats\n{tabulate(table, headers=headers, floatfmt='.6f')}")
+    logger.info(f"read_csv() {filepath}\n{tabulate(table, headers=headers, floatfmt='.6f')}\n")
 
     return data, stats
 
@@ -416,58 +482,70 @@ def read_csv(filepath) -> Tuple[List[List[float]], Dict[str, Dict[str, float]]]:
 def save_quadtree_image(
     quadtree: 'Quadtree',
     filename: str,
-    figsize: Tuple[int, int] = (10, 10),
+    figsize: Tuple[int, int] = (80, 80),
     dpi: int = 200,
     draw_points: bool = True,
-    draw_rects: bool = True,
     rect_color: str = "red",
     point_color: str = "blue",
-    alpha: float = 0.3,
+    alpha: float = 0.1,  # 薄い色
 ):
-    """
-    Quadtreeの点群とノード境界を画像として保存する
+    """ 四分木の可視化画像を保存する """
 
-    Args:
-        quadtree (Quadtree): 可視化したい四分木
-        filename (str): 保存先ファイル名（例: "output.png"）
-        figsize (tuple): 画像サイズ
-        dpi (int): 解像度
-        draw_points (bool): 点群を描画するか
-        draw_rects (bool): ノード境界を描画するか
-        rect_color (str): 境界線の色
-        point_color (str): 点の色
-        alpha (float): 境界線の透明度
-    """
+    leaf_nodes = quadtree.get_leaf_nodes()
+
+    # ノード全体の座標範囲を取得
+    lats = []
+    lons = []
+    for node in leaf_nodes:
+        lat1, lon1, lat2, lon2 = node.bounds
+        lats.extend([lat1, lat2])
+        lons.extend([lon1, lon2])
+    min_lat, max_lat = min(lats), max(lats)
+    min_lon, max_lon = min(lons), max(lons)
+
+    import matplotlib.pyplot as plt
     fig, ax = plt.subplots(figsize=figsize, dpi=dpi)
 
-    # 点群の描画
+    # ノードごとに矩形を必ず描画
+    for node in leaf_nodes:
+        lat1, lon1, lat2, lon2 = node.bounds
+        width = lon2 - lon1
+        height = lat2 - lat1
+        if node.points:
+            # データがあるリーフノードは薄いグレーで塗りつぶす
+            ax.add_patch(
+                plt.Rectangle(
+                    (lon1, lat1), width, height,
+                    fill=True, facecolor=(0.7, 0.7, 0.7, alpha), edgecolor=rect_color, linewidth=0.5
+                )
+            )
+        else:
+            # データがないリーフノードは枠線のみ
+            ax.add_patch(
+                plt.Rectangle(
+                    (lon1, lat1), width, height,
+                    fill=False, facecolor='none', edgecolor=rect_color, linewidth=0.5
+                )
+            )
+
+    # 点群の描画（draw_pointsがTrueのときのみ）
     if draw_points:
         all_points = []
-        for node in quadtree.get_leaf_nodes():
+        for node in leaf_nodes:
             for p in node.points:
                 all_points.append((p['lon'], p['lat']))
         if all_points:
             xs, ys = zip(*all_points)
             ax.scatter(xs, ys, s=1, color=point_color, alpha=0.7, label="points")
 
-    # ノード境界の描画
-    def draw_node_rect(node: 'QuadtreeNode'):
-        lat1, lon1, lat2, lon2 = node.bounds
-        width = lon2 - lon1
-        height = lat2 - lat1
-        rect = plt.Rectangle((lon1, lat1), width, height, fill=False, edgecolor=rect_color, alpha=alpha, linewidth=0.5)
-        ax.add_patch(rect)
-        for child in node.children:
-            draw_node_rect(child)
-
-    if draw_rects:
-        draw_node_rect(quadtree.root)
+    # 座標範囲を明示的に指定
+    ax.set_xlim(min_lon, max_lon)
+    ax.set_ylim(min_lat, max_lat)
 
     ax.set_xlabel("Longitude")
     ax.set_ylabel("Latitude")
-    ax.set_title("Quadtree Points and Node Boundaries")
+    ax.set_title("Quadtree Node Visualization")
     ax.set_aspect('equal')
-    ax.legend(loc="upper right", markerscale=6)
     plt.tight_layout()
     plt.savefig(filename)
     plt.close(fig)
@@ -490,7 +568,9 @@ if __name__ == '__main__':
 
 
     def main():
-        data_filename = "data.csv"
+
+        data_filename = "ALL_depth_map_data_202502_dedup_outliers.csv"
+
         data_path = data_dir.joinpath(data_filename)
         if not data_path.exists():
             logger.error("File not found: %s" % data_path)
@@ -504,8 +584,8 @@ if __name__ == '__main__':
         # max  35.173733  139.621782  47.539000
 
         # 中央座標を求める
-        mid_lat = (data_stats['lat']['min'] + data_stats['lat']['max']) / 2
-        mid_lon = (data_stats['lon']['min'] + data_stats['lon']['max']) / 2
+        mid_lat = (data_stats['lat']['min'] + data_stats['lat']['max']) / 2.0
+        mid_lon = (data_stats['lon']['min'] + data_stats['lon']['max']) / 2.0
 
         # 四分木の境界を正方形で設定
         square_size = max(
@@ -522,44 +602,90 @@ if __name__ == '__main__':
             point = {'lat': lat, 'lon': lon, 'depth': depth}
             quadtree.insert(point)
 
-        # 四分木の統計情報を取得
-        stats = quadtree.stats()
-
         # 四分木の統計情報を表示する
-        table = [
-            ["total_nodes", stats.get("total_nodes", 0)],
-            ["leaf_nodes", stats.get("leaf_nodes", 0)],
-            ["max_level", stats.get("max_level", 0)],
-            ["deepest_nodes_count", stats.get("deepest_nodes_count", 0)],
-            ["leaf_points_max", stats.get("leaf_points_max", 0)],
-            ["deepest_node_size(m)", f"{stats.get('deepest_node_size_m', 0):.3f}"]
-        ]
-        headers = ["", "value"]
-        logger.info(f"Quadtree stats\n{tabulate(table, headers=headers, numalign='right')}")
+        logger.info(f"Initial Quadtree stats\n{quadtree.get_stats_text()}\n")
 
-        # 最も深いノードについては、そのノード内の点の平均値に置き換える
-        deepest_level = stats.get("max_level", 0)
+        #
+        # データ集約
+        #
+
+        # 最も深いノード、および一つ上の階層のノードについては、そのノード内のポイントの平均値に置き換える
+        deepest_level = quadtree.get_stats().get("max_level", 0)
         for node in quadtree.get_leaf_nodes():
-            if node.level == deepest_level and len(node.points) > 1:
-                avg_point = node.aggregate_average()
+            if node.level >= (deepest_level - 1) and len(node.points) > 1:
+                avg_point = node.average()
                 node.points = [avg_point]
 
-        aggregated_points = []
+        # 四分木の統計情報を表示する
+        logger.info(f"Aggregated Quadtree stats\n{quadtree.get_stats_text()}\n")
+
+        #
+        # データ拡張
+        # ポイントのない葉ノードについては、隣接ノードに値があればその平均値で埋める
+        #
+        extended_count = 0
+        empty_leaf_nodes = quadtree.get_empty_leaf_nodes()
+        for node in empty_leaf_nodes:
+
+            if node.level < deepest_level - 3:
+                # 深さが浅いノードは無視
+                continue
+
+            # 隣接ノードに格納されているポイントを収集
+            neighbor_points = []
+
+            # ノードの中心座標
+            mid_lat, mid_lon = node.center
+
+            # 8方向の隣接ノードをチェック
+            directions = [
+                (mid_lat - node.lat_length, mid_lon - node.lon_length),  # NW
+                (mid_lat - node.lat_length, mid_lon),                    # N
+                (mid_lat - node.lat_length, mid_lon + node.lon_length),  # NE
+                (mid_lat, mid_lon - node.lon_length),                    # W
+                (mid_lat, mid_lon + node.lon_length),                    # E
+                (mid_lat + node.lat_length, mid_lon - node.lon_length),  # SW
+                (mid_lat + node.lat_length, mid_lon),                    # S
+                (mid_lat + node.lat_length, mid_lon + node.lon_length)   # SE
+            ]
+
+            # 8方向の隣接ノードを取得
+            for d_lat, d_lon in directions:
+                neighbor_node = quadtree.get_leaf_node_by_point(d_lat, d_lon)
+                if neighbor_node and len(neighbor_node.points) > 0:
+                    neighbor_points.extend(neighbor_node.points)
+
+            # 平均値で埋める
+            if len(neighbor_points) > 3:
+                avg_lat = sum(p['lat'] for p in neighbor_points) / len(neighbor_points)
+                avg_lon = sum(p['lon'] for p in neighbor_points) / len(neighbor_points)
+                avg_depth = sum(p['depth'] for p in neighbor_points) / len(neighbor_points)
+                node.points.append({'lat': avg_lat, 'lon': avg_lon, 'depth': avg_depth})
+                extended_count += 1
+
+        logger.info(f"Extended {extended_count} empty leaf nodes with neighbor averages")
+
+        # 拡張した四分木の統計情報を表示する
+        logger.info(f"Extended Quadtree stats\n{quadtree.get_stats_text()}\n")
+
+        # 点群をファイルに保存する
+        points = []
         for node in quadtree.get_leaf_nodes():
-            aggregated_points.extend(node.points)
-        logger.info(f"Aggregated points count: {len(aggregated_points)}")
+            points.extend(node.points)
+        logger.info(f"Points count: {len(points)}")
 
-
-        # 四分木の可視化画像を保存
-        output_image_path = log_dir.joinpath("quadtree_visualization.png")
-        save_quadtree_image(quadtree, output_image_path)
-
+        # CSVファイルはJavaScriptのディレクトリに保存
         output_path = app_home.joinpath("static/data/aggregated_data.csv")
         with open(output_path, 'w') as f:
             f.write("lat,lon,depth\n")
-            for p in aggregated_points:
+            for p in points:
                 f.write(f"{p['lat']},{p['lon']},{p['depth']}\n")
-        logger.info(f"Aggregated data saved to: {output_path}")
+        logger.info(f"Points data saved to: {output_path}")
+
+        # 四分木の可視化画像を保存する
+        output_image_filename = f"{data_path.stem}_qtree.png"
+        output_image_path = image_dir.joinpath(output_image_filename)
+        save_quadtree_image(quadtree=quadtree, filename=output_image_path, draw_points=False)
 
     #
     # 実行

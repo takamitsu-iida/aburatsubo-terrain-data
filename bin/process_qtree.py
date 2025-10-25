@@ -166,7 +166,7 @@ if __name__ == '__main__':
         deepest_level = stats.get("max_level", 0)
         for node in quadtree.get_leaf_nodes():
             if node.level == deepest_level and len(node.points) > 1:
-                avg_point = node.aggregate_average()
+                avg_point = node.average()
                 node.points = [avg_point]
 
         aggregated_points = []

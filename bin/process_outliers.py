@@ -31,8 +31,9 @@ try:
     import numpy as np
     import pandas as pd
 
-    from sklearn.neighbors import LocalOutlierFactor  # process_outlier()
-    from sklearn.ensemble import IsolationForest  # process_outlier()
+    from sklearn.neighbors import LocalOutlierFactor
+    from sklearn.ensemble import IsolationForest
+    from sklearn.neighbors import NearestNeighbors
 
 except ImportError as e:
     logging.error("必要なモジュールがインストールされていません。pandasおよびscikit-learnをインストールしてください。")
@@ -152,14 +153,15 @@ def snap_to_one_meter_grid(latitude, longitude):
     return snapped_latitude, snapped_longitude
 
 
-def local_outlier_factor(df: pd.DataFrame, n_neighbors: int = 20) -> np.ndarray:
+def local_outlier_factor(df: pd.DataFrame, n_neighbors: int = 20, features: list = ["lat", "lon"]) -> np.ndarray:
     """Local Outlier Factor (LOF)を使用して外れ値を検出する
 
     Args:
         df (pd.DataFrame): 入力データフレーム。'lat'および'lon'列を含む必要があります。
         n_neighbors (int, optional): 近傍点の数. デフォルトは20.
+        features (list, optional): 使用する特徴量のリスト. デフォルトは["lat", "lon"].
 
-    Returns:        np.ndarray: 各サンプルの予測結果。1は正常、-1は外れ値を示す。
+    Returns: np.ndarray: 各サンプルの予測結果。1は正常、-1は外れ値を示す。
     """
 
     # n_neighborsはデータ数が数百件以下のような少ない場合は5～10が推奨され、
@@ -170,8 +172,8 @@ def local_outlier_factor(df: pd.DataFrame, n_neighbors: int = 20) -> np.ndarray:
     # LOFモデルの作成と適合
     lof = LocalOutlierFactor(n_neighbors=n_neighbors)
 
-    # 特徴量として緯度と経度を使用
-    X = df[["lat", "lon"]]
+    # 特徴量を指定してデータを抽出（デフォルトは緯度と経度）
+    X = df[features]
 
     # 学習させる
     lof.fit(X)
@@ -183,17 +185,52 @@ def local_outlier_factor(df: pd.DataFrame, n_neighbors: int = 20) -> np.ndarray:
     return predicted
 
 
-def isolation_forest(df: pd.DataFrame) -> np.ndarray:
+def isolation_forest(df: pd.DataFrame, features: list = ["lat", "lon"]) -> np.ndarray:
     isof = IsolationForest(
         contamination='auto',
         n_estimators=100,
         random_state=42,
     )
-    X = df[["lat", "lon"]]
+
+    # 特徴量を指定してデータを抽出（デフォルトは緯度と経度）
+    X = df[features]
+
     # 学習させる
     isof.fit(X)
+
+    # 予測を行う
     predicted = isof.predict(X)
+
+    # 予測結果を返す
     return predicted
+
+
+def spatial_depth_outlier(df, k=10, z_thresh=2.5):
+    """
+    (lat, lon)で近傍点を探し、そのdepth分布から外れ値を判定
+
+    z_thresh: zスコアの閾値、一般的には2.5-3.0が使われる
+    """
+    X = df[["lat", "lon"]].values
+    depths = df["depth"].values
+    nbrs = NearestNeighbors(n_neighbors=k+1).fit(X)
+    indices = nbrs.kneighbors(X, return_distance=False)
+
+    outlier_mask = np.ones(len(df), dtype=bool)
+    for i, neighbors in enumerate(indices):
+        # 自分自身を除く
+        neighbors = neighbors[neighbors != i]
+        neighbor_depths = depths[neighbors]
+        mean = neighbor_depths.mean()
+        std = neighbor_depths.std()
+        if std == 0:
+            outlier_mask[i] = True  # 標準偏差0なら外れ値判定しない
+        else:
+            z = abs(depths[i] - mean) / std
+            outlier_mask[i] = z < z_thresh  # zスコアが閾値未満なら正常
+
+    return outlier_mask
+
 
 
 if __name__ == '__main__':
@@ -222,22 +259,33 @@ if __name__ == '__main__':
         # CSVファイルをPandasのデータフレームとして読み込む
         try:
             df = pd.read_csv(input_file_path)
-            logger.info(f"describe()\n{df.describe().to_markdown()}")
+            logger.info(f"describe() --- 入力データ\n{df.describe().to_markdown()}\n")
         except Exception as e:
             logger.error(f"CSVファイルの読み込みに失敗しました：{str(e)}")
             return
 
-        # 外れ値を検出する
-        predicted = local_outlier_factor(df, n_neighbors=20)
+        #
+        # ["lat", "lon"]を特徴量としてLOFで外れ値を検出する(LOF)
+        # これにより、位置情報が非常に離れている点を除去する
+        #
+        predicted = local_outlier_factor(df, n_neighbors=20, features=["lat", "lon"])
 
-        # 外れ値を除去したデータフレームを作成する
-        df_cleaned = df[predicted == 1].reset_index(drop=True)
+        # 外れ値を除去したデータフレームに置き換える
+        df = df[predicted == 1].reset_index(drop=True)
 
-        logger.info(f"describe() --- 外れ値を削除後\n{df_cleaned.describe().to_markdown()}\n")
+        logger.info(f"describe() --- 位置の外れ値を削除後\n{df.describe().to_markdown()}\n")
+
+        #
+        # 水深の異常値を検出する
+        #
+        mask = spatial_depth_outlier(df)
+        df = df[mask].reset_index(drop=True)
+
+        logger.info(f"describe() --- 水深の外れ値を削除後\n{df.describe().to_markdown()}\n")
 
         # 外れ値を除去したデータフレームをCSVファイルに保存する
         try:
-            df_cleaned.to_csv(output_file_path, index=False)
+            df.to_csv(output_file_path, index=False)
             logger.info(f"外れ値を除去したデータフレームを保存しました: {output_filename}")
         except Exception as e:
             logger.error(f"CSVファイルの保存に失敗しました：{str(e)}")
