@@ -205,7 +205,7 @@ def isolation_forest(df: pd.DataFrame, features: list = ["lat", "lon"]) -> np.nd
     return predicted
 
 
-def spatial_depth_outlier(df, k=10, z_thresh=2.5):
+def spatial_depth_outlier(df, k=20, z_thresh=3.0):
     """
     (lat, lon)で近傍点を探し、そのdepth分布から外れ値を判定
 
