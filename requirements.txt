@@ -1,10 +1,19 @@
 # for data processing and analysis
 numpy
+
+# for plotting
 matplotlib
+
+# for data manipulation
 pandas
+
+# for scientific computing
 scipy
+
+# for LOF (Local Outlier Factor) algorithm
 scikit-learn
 
+# for spatial indexing
 rtree
 
 # for Jupyter Notebook
@@ -18,3 +27,6 @@ geopy
 
 # for testing
 pytest
+
+# for kriging
+pykrige

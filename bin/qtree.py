@@ -2,10 +2,6 @@
 
 # 四分木を実装したスクリプトです。
 
-
-# ログをファイルにも出力するかどうか
-USE_FILE_HANDLER = True
-
 #
 # 標準ライブラリのインポート
 #
@@ -28,7 +24,7 @@ warnings.filterwarnings(action="ignore", category=UserWarning, module=r"numpy.*"
 try:
     import matplotlib.pyplot as plt
     from tabulate import tabulate
-    from geopy.distance import great_circle, distance
+    from geopy.distance import distance
 except ImportError as e:
     print(f"必要なライブラリがインストールされていません: {e}")
     sys.exit(1)
@@ -96,11 +92,10 @@ stdout_handler.setLevel(logging.INFO)
 logger.addHandler(stdout_handler)
 
 # ログファイルのハンドラ
-if USE_FILE_HANDLER:
-    file_handler = logging.FileHandler(os.path.join(log_dir, log_file), 'a+')
-    file_handler.setFormatter(formatter)
-    file_handler.setLevel(logging.INFO)
-    logger.addHandler(file_handler)
+file_handler = logging.FileHandler(os.path.join(log_dir, log_file), 'a+')
+file_handler.setFormatter(formatter)
+file_handler.setLevel(logging.INFO)
+logger.addHandler(file_handler)
 
 #
 # ここからスクリプト
@@ -503,7 +498,6 @@ def save_quadtree_image(
     min_lat, max_lat = min(lats), max(lats)
     min_lon, max_lon = min(lons), max(lons)
 
-    import matplotlib.pyplot as plt
     fig, ax = plt.subplots(figsize=figsize, dpi=dpi)
 
     # ノードごとに矩形を必ず描画
@@ -554,6 +548,8 @@ def save_quadtree_image(
 if __name__ == '__main__':
 
     def misc():
+        from geopy.distance import great_circle, distance
+
         # 座標を (緯度, 経度) のタプルで定義
         tokyo = (35.681236, 139.767125)
         osaka = (34.702485, 135.495574)
