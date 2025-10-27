@@ -109,7 +109,7 @@ if USE_FILE_HANDLER:
 # ここからスクリプト
 #
 
-def snap_to_one_meter_grid(latitude, longitude):
+def snap_to_one_meter_grid(latitude: float, longitude: float) -> tuple[float, float]:
     """
     GPS座標を概算で1m単位のグリッドに吸着させる関数。
 
@@ -156,15 +156,15 @@ def snap_to_one_meter_grid(latitude, longitude):
     return snapped_latitude, snapped_longitude
 
 
-def local_outlier_factor(df: pd.DataFrame, n_neighbors: int = 20, features: list = ["lat", "lon"]) -> np.ndarray:
-    """Local Outlier Factor (LOF)を使用して外れ値を検出する
+def local_outlier_factor(df: pd.DataFrame, n_neighbors: int = 20, features: list = ["lat", "lon"]) -> pd.DataFrame:
+    """Local Outlier Factor (LOF)を使用して外れ値を検出し、除去したデータフレームを返す関数。
 
     Args:
         df (pd.DataFrame): 入力データフレーム。'lat'および'lon'列を含む必要があります。
         n_neighbors (int, optional): 近傍点の数. デフォルトは20.
         features (list, optional): 使用する特徴量のリスト. デフォルトは["lat", "lon"].
 
-    Returns: np.ndarray: 各サンプルの予測結果。1は正常、-1は外れ値を示す。
+    Returns:
     """
 
     # n_neighborsはデータ数が数百件以下のような少ない場合は5～10が推奨され、
@@ -182,13 +182,26 @@ def local_outlier_factor(df: pd.DataFrame, n_neighbors: int = 20, features: list
     lof.fit(X)
 
     # 予測を行う
-    predicted = lof.fit_predict(X)
+    # 各サンプルの予測結果。1は正常、-1は外れ値を示す。
+    predicted: np.ndarray = lof.fit_predict(X)
 
-    # 予測結果を返す
-    return predicted
+    # 外れ値を除去したデータフレームに置き換える
+    df = df[predicted == 1].reset_index(drop=True)
+
+    # 結果を返す
+    return df
 
 
-def isolation_forest(df: pd.DataFrame, features: list = ["lat", "lon"]) -> np.ndarray:
+def isolation_forest(df: pd.DataFrame, features: list = ["lat", "lon"]) -> pd.DataFrame:
+    """
+    Isolation Forestを使用して外れ値を検出し、除去したデータフレームを返す関数。
+
+    Args:
+        df (pd.DataFrame): 入力データフレーム。'lat'および'lon'列を含む必要があります。
+        features (list, optional): 使用する特徴量のリスト. デフォルトは["lat", "lon"].
+
+    Returns: pd.DataFrame: 外れ値を除去したデータフレーム。
+    """
     isof = IsolationForest(
         contamination='auto',
         n_estimators=100,
@@ -202,15 +215,19 @@ def isolation_forest(df: pd.DataFrame, features: list = ["lat", "lon"]) -> np.nd
     isof.fit(X)
 
     # 予測を行う
-    predicted = isof.predict(X)
+    # 各サンプルの予測結果。1は正常、-1は外れ値を示す。
+    predicted: np.ndarray = isof.predict(X)
+
+    # 外れ値を除去したデータフレームに置き換える
+    df = df[predicted == 1].reset_index(drop=True)
 
     # 予測結果を返す
-    return predicted
+    return df
 
 
-def spatial_depth_outlier(df, k=30, z_thresh=3.0):
+def spatial_depth_outlier(df, k=30, z_thresh=3.0) -> pd.DataFrame:
     """
-    (lat, lon)で近傍点を探し、そのdepth分布から外れ値を判定
+    (lat, lon)で近傍点を探し、そのdepth分布から外れ値を判定、除去する関数。
 
     z_thresh: zスコアの閾値、一般的には2.5-3.0が使われる
     """
@@ -223,6 +240,7 @@ def spatial_depth_outlier(df, k=30, z_thresh=3.0):
     for i, neighbors in enumerate(indices):
         # 自分自身を除く
         neighbors = neighbors[neighbors != i]
+
         neighbor_depths = depths[neighbors]
         mean = neighbor_depths.mean()
         std = neighbor_depths.std()
@@ -232,19 +250,20 @@ def spatial_depth_outlier(df, k=30, z_thresh=3.0):
             z = abs(depths[i] - mean) / std
             outlier_mask[i] = z < z_thresh  # zスコアが閾値未満なら正常
 
-    return outlier_mask
+    df = df[outlier_mask].reset_index(drop=True)
+
+    return df
 
 
 
-def median_filter_outlier(df: pd.DataFrame, radius_m: float = 5.0) -> None:
+def median_filter_outlier(df: pd.DataFrame, radius_m: float = 5.0) -> pd.DataFrame:
     """
     メディアンフィルタで深度の異常値を修正する(平準化する)
     radius_m: 近傍探索の半径（メートル単位）
     """
 
     # 緯度・経度をメートル座標に変換
-    # TODO:
-    # 緯度によって変化するので、厳密には各点ごとに計算するべき
+    #   TODO: 緯度によって変化するので、厳密には各点ごとに計算するべき
     METERS_PER_DEG_LAT = 111000.0
     METERS_PER_DEG_LON = 91287.0  # 北緯35度付近
 
@@ -264,6 +283,8 @@ def median_filter_outlier(df: pd.DataFrame, radius_m: float = 5.0) -> None:
         new_depths[i] = median_val
 
     df['depth'] = new_depths
+
+    return df
 
 
 if __name__ == '__main__':
@@ -301,29 +322,23 @@ if __name__ == '__main__':
         # ["lat", "lon"]を特徴量としてLOFで外れ値を検出する(LOF)
         # これにより、位置情報が非常に離れている点を除去する
         #
-        predicted = local_outlier_factor(df, n_neighbors=20, features=["lat", "lon"])
-
-        # 外れ値を除去したデータフレームに置き換える
-        df = df[predicted == 1].reset_index(drop=True)
-
+        df = local_outlier_factor(df, n_neighbors=20, features=["lat", "lon"])
         logger.info(f"describe() --- 位置の外れ値を削除後\n{df.describe().to_markdown()}\n")
 
         #
         # 水深の異常値を検出する
         #
-        mask = spatial_depth_outlier(df)
-        df = df[mask].reset_index(drop=True)
-
-        logger.info(f"describe() --- 水深の外れ値を削除後\n{df.describe().to_markdown()}\n")
+        # df = spatial_depth_outlier(df)
+        # logger.info(f"describe() --- 水深の外れ値を削除後\n{df.describe().to_markdown()}\n")
 
         #
         # メディアンフィルタで深さを滑らかにする（異常値を修正する）
         #
-        median_filter_outlier(df, radius_m=5.0)
+        df = median_filter_outlier(df, radius_m=5.0)
         logger.info(f"describe() --- メディアンフィルタ適用後\n{df.describe().to_markdown()}\n")
 
         #
-        # 修正したデータフレームをCSVファイルに保存する
+        # 外れ値を除去したデータフレームをCSVファイルに保存する
         #
         try:
             df.to_csv(output_file_path, index=False)

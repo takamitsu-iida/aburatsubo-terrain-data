@@ -126,7 +126,7 @@ class QuadtreeNode:
         return len(self.children) == 0
 
 
-    def subdivide(self):
+    def subdivide(self) -> None:
         """ ノードを4つの子ノードに分割 """
         lat1, lon1, lat2, lon2 = self.bounds
         mid_lat = (lat1 + lat2) / 2
@@ -246,23 +246,28 @@ class Quadtree:
 
     """ 四分木クラス """
 
-    LEVEL_LIMIT = 1  # 最大分割レベル（初期値、後で設定される）
+    # 最大分割レベル
+    # 四分木の領域の大きさに応じて初期化時に調整される
+    LEVEL_LIMIT: int = 1
 
-    MIN_GRID_WIDTH = 2.0  # 単位メートル
+    # 最小グリッド幅（メートル単位）
+    # 四分木の最大分割レベルを決定するために使用
+    # 例えば、2メートルに設定すると、最小の葉ノードの一辺の長さが約2メートル以下（1.0～2.0）になる
+    MIN_GRID_WIDTH: float = 2.0
 
-    MAX_POINTS = 4
-
+    # ノードあたりの最大ポイント数
+    MAX_POINTS: int = 4
 
     def __init__(self, bounds: Tuple[float, float, float, float]):
 
         # ルートノードを作成
-        self.root = QuadtreeNode(bounds, 0)
+        self.root = QuadtreeNode(bounds=bounds, level=0, parent=None)
 
-        # boundsは (lat1, lon1, lat2, lon2) の形式
-
-        # boundsの大きさ（緯度・経度の差）をメートルに変換
+        # boundsは (lat1, lon1, lat2, lon2) の形式で、NW, SEの対角線で囲まれた矩形領域を想定
+        # boundsの各値を取得
         lat1, lon1, lat2, lon2 = bounds
 
+        # 各辺の大きさ（緯度・経度の差）をメートルに変換
         # 南西→北西（緯度方向の距離）
         height_m = distance((lat1, lon1), (lat2, lon1)).meters
 
@@ -376,27 +381,19 @@ class Quadtree:
             "nonempty_leaf_nodes": len([node for node in leaf_nodes if len(node.points) > 0]),
             "max_level": max_level,
             "deepest_nodes_count": len(deepest_nodes),
-            "leaf_points_max": max(leaf_points_counts) if leaf_points_counts else 0,
+            "max_leaf_points": max(leaf_points_counts) if leaf_points_counts else 0,
             "deepest_node_size_m": deepest_node_size
         }
 
 
-    def get_stats_text(self):
+    def get_stats_text(self) -> str:
+        """
+        四分木の統計情報を整形して返す
+        """
         stats = self.get_stats()
-
-        table = [
-            ["total_nodes", stats.get("total_nodes", 0)],
-            ["leaf_nodes", stats.get("leaf_nodes", 0)],
-            ["empty_leaf_nodes", stats.get("empty_leaf_nodes", 0)],
-            ["nonempty_leaf_nodes", stats.get("nonempty_leaf_nodes", 0)],
-            ["max_level", stats.get("max_level", 0)],
-            ["deepest_nodes_count", stats.get("deepest_nodes_count", 0)],
-            ["leaf_points_max", stats.get("leaf_points_max", 0)],
-            ["deepest_node_size(m)", f"{stats.get('deepest_node_size_m', 0):.3f}"]
-        ]
-        headers = ["", "value"]
-
-        return tabulate(table, headers=headers, numalign='right')
+        table = [[k, f"{v:.3f}" if isinstance(v, float) else v] for k, v in stats.items()]
+        headers = ["項目", "値"]
+        return tabulate(table, headers=headers, numalign='right', tablefmt='github')
 
 
 def get_latlon_delta(lat: float, lon: float, meters: float = 1.0) -> tuple[float, float]:
@@ -565,7 +562,7 @@ if __name__ == '__main__':
 
     def main():
 
-        data_filename = "ALL_depth_map_data_202502_dedup_outliers.csv"
+        data_filename = "ALL_depth_map_data_202502_dd_ol.csv"
 
         data_path = data_dir.joinpath(data_filename)
         if not data_path.exists():
@@ -583,7 +580,7 @@ if __name__ == '__main__':
         mid_lat = (data_stats['lat']['min'] + data_stats['lat']['max']) / 2.0
         mid_lon = (data_stats['lon']['min'] + data_stats['lon']['max']) / 2.0
 
-        # 四分木の境界を正方形で設定
+        # ルートになる四分木の境界を正方形で設定
         square_size = max(
             mid_lat - data_stats['lat']['min'],
             data_stats['lat']['max'] - mid_lat,
@@ -591,8 +588,11 @@ if __name__ == '__main__':
             data_stats['lon']['max'] - mid_lon
         )
         bounds = (mid_lat - square_size, mid_lon - square_size, mid_lat + square_size, mid_lon + square_size)
+
+        # 四分木を初期化
         quadtree = Quadtree(bounds)
 
+        # データを四分木に挿入
         for row in data:
             lat, lon, depth = row
             point = {'lat': lat, 'lon': lon, 'depth': depth}
@@ -616,7 +616,7 @@ if __name__ == '__main__':
         logger.info(f"Aggregated Quadtree stats\n{quadtree.get_stats_text()}\n")
 
         #
-        # データ拡張
+        # データを増やす
         # ポイントのない葉ノードについては、隣接ノードに値があればその平均値で埋める
         #
         extended_count = 0

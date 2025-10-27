@@ -14,8 +14,7 @@ OUTLIER=_ol
 INTERPOLATE=_ip
 
 dd: ## step1. deduplicate 重複する座標データを削除して新しいCSVファイルを作成する
-	@python3 bin/process_duplicate.py --input $(
-		DATA_FILENAME) --output $(DATA_BASENAME)$(DEDUP).csv
+	@python3 bin/process_duplicate.py --input $(DATA_FILENAME) --output $(DATA_BASENAME)$(DEDUP).csv
 
 ol: ## step2. outlier 外れ値を検出して新しいCSVファイルを作成する
 	@python3 bin/process_outlier.py --input $(DATA_BASENAME)$(DEDUP).csv --output $(DATA_BASENAME)$(DEDUP)$(OUTLIER).csv

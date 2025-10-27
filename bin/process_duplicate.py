@@ -121,17 +121,17 @@ def load_csv(data_path):
         return None
 
 
-def process_duplicates(df: pd.DataFrame):
+def process_duplicates(df: pd.DataFrame) -> pd.DataFrame:
     """
     (lat, lon)が重複した行については、depthの平均値を取り、(lat, lon, depth)で1行だけ残す。
     """
     before = len(df)
     # groupbyで(lat, lon)ごとにdepthの平均を計算
-    df_agg = df.groupby(['lat', 'lon'], as_index=False)['depth'].mean()
-    after = len(df_agg)
+    df_uniq = df.groupby(['lat', 'lon'], as_index=False)['depth'].mean()
+    after = len(df_uniq)
     removed = before - after
     logger.info(f"重複排除前: {before}件, 排除後: {after}件, 排除数: {removed}件")
-    return df_agg
+    return df_uniq
 
 
 if __name__ == '__main__':
