@@ -3,26 +3,33 @@
 help:
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-30s\033[0m %s\n", $$1, $$2}'
 
-INPUT_DATA_FILENAME = ALL_depth_map_data_202502.csv
+# dataディレクトリにあるCSVファイルを処理する
+
+# 入力ファイル名(data/は含まず、ファイル名のみを指定)
+DATA_FILENAME = ALL_depth_map_data_202502.csv
+DATA_BASENAME = $(basename $(DATA_FILENAME))
 
 DEDUP=_dd
 OUTLIER=_ol
 INTERPOLATE=_ip
 
-INPUT_DATA_BASENAME = $(basename $(INPUT_DATA_FILENAME))
+dd: ## step1. deduplicate 重複する座標データを削除して新しいCSVファイルを作成する
+	@python3 bin/process_duplicate.py --input $(
+		DATA_FILENAME) --output $(DATA_BASENAME)$(DEDUP).csv
 
-dedup: ## 重複する座標データを削除して新しいCSVファイルを作成する
-	@python3 bin/process_duplicates.py --input $(INPUT_DATA_FILENAME) --output $(INPUT_DATA_BASENAME)$(DEDUP).csv
+ol: ## step2. outlier 外れ値を検出して新しいCSVファイルを作成する
+	@python3 bin/process_outlier.py --input $(DATA_BASENAME)$(DEDUP).csv --output $(DATA_BASENAME)$(DEDUP)$(OUTLIER).csv
 
-outliers: ## 外れ値を検出して新しいCSVファイルを作成する
-	@python3 bin/process_outliers.py --input $(INPUT_DATA_BASENAME)$(DEDUP).csv --output $(INPUT_DATA_BASENAME)$(DEDUP)$(OUTLIER).csv
-
-interpolate: ## 欠損値を補完して新しいCSVファイルを作成する
-	@python3 bin/process_interpolation.py --input $(INPUT_DATA_BASENAME)$(DEDUP)$(OUTLIER).csv --output data/data_interpolated.csv
+ip: ## step3. interpolate 欠損値を補完して新しいCSVファイルを作成する
+	@python3 bin/process_interpolate.py --input $(DATA_BASENAME)$(DEDUP)$(OUTLIER).csv --output $(DATA_BASENAME)$(DEDUP)$(OUTLIER)$(INTERPOLATE).csv
 
 scatter: ## 散布図を作成する
-	@python3 bin/draw_scatter.py --input $(INPUT_DATA_BASENAME)$(DEDUP).csv --title "Deduplicated"
-	@python3 bin/draw_scatter.py --input $(INPUT_DATA_BASENAME)$(DEDUP)$(OUTLIER).csv --title "Outlier removed"
+	@if [ -f data/$(DATA_BASENAME)$(DEDUP).csv ]; then \
+		python3 bin/draw_scatter.py --input $(DATA_BASENAME)$(DEDUP).csv --title "Deduplicated"; \
+	fi
+	@if [ -f data/$(DATA_BASENAME)$(DEDUP)$(OUTLIER).csv ]; then \
+		python3 bin/draw_scatter.py --input $(DATA_BASENAME)$(DEDUP)$(OUTLIER).csv --title "Outlier removed"; \
+	fi
 
 clean: ## データファイルを削除する
 	@rm -f data/data_dedup.csv
