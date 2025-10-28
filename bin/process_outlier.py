@@ -33,7 +33,6 @@ try:
 
     from sklearn.neighbors import LocalOutlierFactor
     from sklearn.ensemble import IsolationForest
-    from sklearn.neighbors import NearestNeighbors
 
     # KDTreeを使って高速に近傍点を探索する
     from scipy.spatial import cKDTree
@@ -98,63 +97,14 @@ stdout_handler.setLevel(logging.INFO)
 logger.addHandler(stdout_handler)
 
 # ログファイルのハンドラ
-USE_FILE_HANDLER = True
-if USE_FILE_HANDLER:
-    file_handler = logging.FileHandler(log_dir.joinpath(log_file), 'a+')
-    file_handler.setFormatter(formatter)
-    file_handler.setLevel(logging.INFO)
-    logger.addHandler(file_handler)
+file_handler = logging.FileHandler(log_dir.joinpath(log_file), 'a+')
+file_handler.setFormatter(formatter)
+file_handler.setLevel(logging.INFO)
+logger.addHandler(file_handler)
 
 #
 # ここからスクリプト
 #
-
-def snap_to_one_meter_grid(latitude: float, longitude: float) -> tuple[float, float]:
-    """
-    GPS座標を概算で1m単位のグリッドに吸着させる関数。
-
-    精度を優先しないため、特定の緯度（例：北緯35度付近）での
-    緯度・経度の概算のメートル距離を使用する。
-
-    概算値:
-    - 緯度1度あたり：約 111,000 メートル
-    - 経度1度あたり（北緯35度付近）：約 91,287 メートル
-    """
-
-    # 概算の変換係数 (1度あたりのメートル数)
-    # 緯度方向 (北緯・南緯に関わらずほぼ一定): 約111,000 m/度
-    METERS_PER_DEG_LAT = 111000.0
-
-    # 経度方向 (緯度によって変化する。ここでは北緯35度付近を想定): 約91,287 m/度
-    # 経度1度あたりの距離 = 111,320 * cos(緯度)
-    # 例：cos(35度) * 111,320 ≈ 91,287
-    METERS_PER_DEG_LON = 91287.0
-
-    # --- 1. メートル単位の座標に変換 (基準点からの相対距離として扱う) ---
-
-    # 非常に大きな値になるのを避けるため、適当な「原点」を設定して相対距離を計算します。
-    # ここでは、座標自体を相対値として使い、メートルに変換します。
-
-    # 緯度をメートルに変換
-    y_meters = latitude * METERS_PER_DEG_LAT
-
-    # 経度をメートルに変換
-    x_meters = longitude * METERS_PER_DEG_LON
-
-    # --- 2. 1m単位で丸める (グリッドへの吸着) ---
-
-    # メートル座標を最も近い整数値 (1m単位) に丸める
-    snapped_x_meters = np.round(x_meters)
-    snapped_y_meters = np.round(y_meters)
-
-    # --- 3. 再度、緯度・経度に逆変換 ---
-
-    # 丸めたメートル座標を元の緯度・経度に戻す
-    snapped_latitude = snapped_y_meters / METERS_PER_DEG_LAT
-    snapped_longitude = snapped_x_meters / METERS_PER_DEG_LON
-
-    return snapped_latitude, snapped_longitude
-
 
 def local_outlier_factor(df: pd.DataFrame, n_neighbors: int = 20, features: list = ["lat", "lon"]) -> pd.DataFrame:
     """Local Outlier Factor (LOF)を使用して外れ値を検出し、除去したデータフレームを返す関数。
@@ -225,65 +175,46 @@ def isolation_forest(df: pd.DataFrame, features: list = ["lat", "lon"]) -> pd.Da
     return df
 
 
-def spatial_depth_outlier(df, k=30, z_thresh=3.0) -> pd.DataFrame:
+def spatial_depth_outlier(df, radius_m=10.0, z_thresh=3.0, min_neighbors=3) -> pd.DataFrame:
     """
-    (lat, lon)で近傍点を探し、そのdepth分布から外れ値を判定、除去する関数。
-
-    z_thresh: zスコアの閾値、一般的には2.5-3.0が使われる
+    (lat, lon)でcKDTreeを使い、半径radius_mメートル以内の近傍点のdepth分布から外れ値を判定、除去する
     """
-    X = df[["lat", "lon"]].values
-    depths = df["depth"].values
-    nbrs = NearestNeighbors(n_neighbors=k+1).fit(X)
-    indices = nbrs.kneighbors(X, return_distance=False)
-
-    outlier_mask = np.ones(len(df), dtype=bool)
-    for i, neighbors in enumerate(indices):
-        # 自分自身を除く
-        neighbors = neighbors[neighbors != i]
-
-        neighbor_depths = depths[neighbors]
-        mean = neighbor_depths.mean()
-        std = neighbor_depths.std()
-        if std == 0:
-            outlier_mask[i] = True  # 標準偏差0なら外れ値判定しない
-        else:
-            z = abs(depths[i] - mean) / std
-            outlier_mask[i] = z < z_thresh  # zスコアが閾値未満なら正常
-
-    df = df[outlier_mask].reset_index(drop=True)
-
-    return df
-
-
-
-def median_filter_outlier(df: pd.DataFrame, radius_m: float = 5.0) -> pd.DataFrame:
-    """
-    メディアンフィルタで深度の異常値を修正する(平準化する)
-    radius_m: 近傍探索の半径（メートル単位）
-    """
-
-    # 緯度・経度をメートル座標に変換
-    #   TODO: 緯度によって変化するので、厳密には各点ごとに計算するべき
+    # 経度1度をメートル座標に変換
     METERS_PER_DEG_LAT = 111000.0
-    METERS_PER_DEG_LON = 91287.0  # 北緯35度付近
 
+    # 緯度1度をメートル座標に変換
+    # 緯度によって変わるので、df['lat']の平均値を使って経度1度あたりの距離を計算する
+    mean_lat = df['lat'].mean()
+    METERS_PER_DEG_LON = 111320.0 * np.cos(np.deg2rad(mean_lat))
+
+    # 座標をメートル単位に変換
     x = df['lon'].values * METERS_PER_DEG_LON
     y = df['lat'].values * METERS_PER_DEG_LAT
     coords = np.column_stack([x, y])
 
-    # KD-Treeを構築
     tree = cKDTree(coords)
+    depths = df["depth"].values
 
-    # depth列を直接置き換える
-    new_depths = np.empty(len(df))
+    outlier_mask = np.ones(len(df), dtype=bool)
     for i in range(len(df)):
         neighbor_indices = tree.query_ball_point(coords[i], r=radius_m)
-        neighbor_depths = df.loc[neighbor_indices, 'depth']
-        median_val = np.median(neighbor_depths)
-        new_depths[i] = median_val
+        neighbor_indices = [idx for idx in neighbor_indices if idx != i]  # 自分自身を除く
 
-    df['depth'] = new_depths
+        # 円の中に含まれる近傍点が少ない場合は異常値判定しない
+        if len(neighbor_indices) <= min_neighbors:
+            outlier_mask[i] = True
+            continue
 
+        neighbor_depths = depths[neighbor_indices]
+        mean = neighbor_depths.mean()
+        std = neighbor_depths.std()
+        if std == 0:
+            outlier_mask[i] = True
+        else:
+            z = abs(depths[i] - mean) / std
+            outlier_mask[i] = z < z_thresh
+
+    df = df[outlier_mask].reset_index(drop=True)
     return df
 
 
@@ -326,16 +257,16 @@ if __name__ == '__main__':
         logger.info(f"describe() --- 位置の外れ値を削除後\n{df.describe().to_markdown()}\n")
 
         #
-        # 水深の異常値を検出する
+        # 水深の異常値を検出、除去する
         #
-        # df = spatial_depth_outlier(df)
-        # logger.info(f"describe() --- 水深の外れ値を削除後\n{df.describe().to_markdown()}\n")
+        df = spatial_depth_outlier(df, radius_m=10.0, z_thresh=3.0, min_neighbors=3)
+        logger.info(f"describe() --- 水深の外れ値を削除後\n{df.describe().to_markdown()}\n")
 
         #
         # メディアンフィルタで深さを滑らかにする（異常値を修正する）
         #
-        df = median_filter_outlier(df, radius_m=5.0)
-        logger.info(f"describe() --- メディアンフィルタ適用後\n{df.describe().to_markdown()}\n")
+        #df = median_filter_outlier(df, radius_m=5.0)
+        #logger.info(f"describe() --- メディアンフィルタ適用後\n{df.describe().to_markdown()}\n")
 
         #
         # 外れ値を除去したデータフレームをCSVファイルに保存する

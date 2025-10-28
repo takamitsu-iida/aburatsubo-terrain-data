@@ -2,13 +2,13 @@
 # -*- coding: utf-8 -*-
 
 """
-DeeperのGPSデータを入力として受け取り、重複する座標データを削除した新しいCSVファイルを作成するスクリプトです。
+DeeperのGPSデータを入力として受け取り、水深の値を滑らかにするフィルタを適用した新しいCSVファイルを作成するスクリプト。
 
 
 """
 
 # スクリプトを引数無しで実行したときのヘルプに使うデスクリプション
-SCRIPT_DESCRIPTION = 'drop duplicate coordinates from Deeper GPS data'
+SCRIPT_DESCRIPTION = 'apply median filter to Deeper GPS data'
 
 #
 # 標準ライブラリのインポート
@@ -28,9 +28,14 @@ warnings.filterwarnings(action="ignore", category=UserWarning, module=r"numpy.*"
 # 外部ライブラリのインポート
 #
 try:
+    import numpy as np
     import pandas as pd
+
+    # KDTreeを使って高速に近傍点を探索する
+    from scipy.spatial import cKDTree
+
 except ImportError as e:
-    logging.error("pandas module is not installed. Please install pandas to use this script.")
+    logging.error("必要なモジュールがインストールされていません。pandasおよびscikit-learnをインストールしてください。")
     sys.exit(1)
 
 
@@ -46,7 +51,7 @@ app_name = app_path.stem
 # アプリケーションのホームディレクトリはこのファイルからみて一つ上
 app_home = app_path.parent.joinpath('..').resolve()
 
-# データを格納しているディレクトリ
+# ディレクトリ
 data_dir = app_home.joinpath("data")
 
 #
@@ -98,43 +103,44 @@ logger.addHandler(file_handler)
 # ここからスクリプト
 #
 
-def read_file(filename, callback):
-    try:
-        with open(filename) as f:
-            for line in f:
-                line = line.rstrip()
-                callback(line)
-    except IOError as e:
-        logger.exception(e)
-
-
-def line_callback(line):
-    print(line)
-
-
-def load_csv(data_path):
-    try:
-        return pd.read_csv(data_path)
-    except:
-        return None
-
-
-def process_duplicates(df: pd.DataFrame) -> pd.DataFrame:
+def median_filter_outlier(df: pd.DataFrame, radius_m: float = 5.0) -> pd.DataFrame:
     """
-    (lat, lon)が重複した行については、depthの平均値を取り、(lat, lon, depth)で1行だけ残す。
+    メディアンフィルタで深度の異常値を修正する(平準化する)
+    radius_m: 近傍探索の半径（メートル単位）
     """
-    before = len(df)
-    # groupbyで(lat, lon)ごとにdepthの平均を計算
-    df_uniq = df.groupby(['lat', 'lon'], as_index=False)['depth'].mean()
-    after = len(df_uniq)
-    removed = before - after
-    logger.info(f"重複排除前: {before}件, 排除後: {after}件, 排除数: {removed}件")
-    return df_uniq
+    # 経度をメートル座標に変換
+    METERS_PER_DEG_LAT = 111000.0
+
+    # 緯度をメートル座標に変換（df['lat']の平均値を使って経度1度あたりの距離を計算）
+    mean_lat = df['lat'].mean()
+    METERS_PER_DEG_LON = 111320.0 * np.cos(np.deg2rad(mean_lat))
+
+    x = df['lon'].values * METERS_PER_DEG_LON
+    y = df['lat'].values * METERS_PER_DEG_LAT
+
+    # 2次元の座標配列を作成
+    coords = np.column_stack([x, y])
+
+    # KD-Treeを構築
+    tree = cKDTree(coords)
+
+    # depth列を直接置き換える
+    new_depths = np.empty(len(df))
+    for i in range(len(df)):
+        neighbor_indices = tree.query_ball_point(coords[i], r=radius_m)
+        neighbor_depths = df.loc[neighbor_indices, 'depth']
+        median_val = np.median(neighbor_depths)
+        new_depths[i] = median_val
+
+    df['depth'] = new_depths
+
+    return df
 
 
 if __name__ == '__main__':
 
     def main() -> None:
+
         # 引数処理
         parser = argparse.ArgumentParser(description=SCRIPT_DESCRIPTION)
         parser.add_argument('--input', type=str, required=True, help='dataディレクトリ直下の入力CSVファイル名')
@@ -146,57 +152,34 @@ if __name__ == '__main__':
             parser.print_help()
             return
 
-        # 保存先のファイル名が指定されていない場合は終了
-        if not args.output:
-            logger.error("出力ファイル名が指定されていません。")
-            return
-
-        # 入力ファイルのパス
         input_file_path = Path(data_dir, args.input)
         if not input_file_path.exists():
             logger.error(f"入力ファイルが存在しません: {input_file_path}")
             return
 
-        # 出力ファイルの名前とパス
         output_filename = args.output
         output_file_path = Path(data_dir, output_filename)
 
-        # 入力CSVファイルをPandasのデータフレームとして読み込む
+        # CSVファイルをPandasのデータフレームとして読み込む
         try:
-            # このCSVファイルには列名がないので、header=Noneを指定して読み込む
-            df = pd.read_csv(input_file_path, header=None)
-
-            # データフレームに列名を定義
-            df.columns = ["lat", "lon", "depth", "time"]
-
-            # 時刻の列は不要なので削除する
-            del df["time"]
+            df = pd.read_csv(input_file_path)
+            logger.info(f"describe() --- 入力データ\n{df.describe().to_markdown()}\n")
         except Exception as e:
             logger.error(f"CSVファイルの読み込みに失敗しました：{str(e)}")
             return
 
-        # 読み込んだデータのサマリを表示する
-        # to_markdown()
-        # を使うにはtabulate moduleが必要
+        #
+        # メディアンフィルタで深さを滑らかにする（異常値を修正する）
+        #
+        df = median_filter_outlier(df, radius_m=5.0)
+        logger.info(f"describe() --- メディアンフィルタ適用後\n{df.describe().to_markdown()}\n")
 
-        # head(3)
-        logger.info(f"head(3)\n{df.head(3).to_markdown()}\n")
-
-        # tail(3)
-        logger.info(f"tail(3)\n{df.tail(3).to_markdown()}\n")
-
-        # describe()
-        logger.info(f"describe() --- 削除前\n{df.describe().to_markdown()}\n")
-
-        # 重複した座標のデータを削除する
-        df = process_duplicates(df)
-
-        logger.info(f"describe() --- 削除後\n{df.describe().to_markdown()}\n")
-
-        # 重複削除後のデータをCSVファイルとして保存
+        #
+        # データフレームをCSVファイルに保存する
+        #
         try:
             df.to_csv(output_file_path, index=False)
-            logger.info(f"重複削除後のデータを保存しました: {output_filename}")
+            logger.info(f"メディアンフィルタを適用したデータフレームを保存しました: {output_filename}")
         except Exception as e:
             logger.error(f"CSVファイルの保存に失敗しました：{str(e)}")
 

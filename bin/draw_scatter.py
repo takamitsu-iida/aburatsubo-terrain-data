@@ -82,12 +82,10 @@ stdout_handler.setLevel(logging.INFO)
 logger.addHandler(stdout_handler)
 
 # ログファイルのハンドラ
-USE_FILE_HANDLER = True
-if USE_FILE_HANDLER:
-    file_handler = logging.FileHandler(log_dir.joinpath(log_file), 'a+')
-    file_handler.setFormatter(formatter)
-    file_handler.setLevel(logging.INFO)
-    logger.addHandler(file_handler)
+file_handler = logging.FileHandler(log_dir.joinpath(log_file), 'a+')
+file_handler.setFormatter(formatter)
+file_handler.setLevel(logging.INFO)
+logger.addHandler(file_handler)
 
 #
 # 外部ライブラリのインポート

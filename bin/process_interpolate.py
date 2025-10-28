@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 """
-DeeperのGPSデータを入力として受け取り、補完処理を行うスクリプトです。
+DeeperのGPSデータを入力として受け取り、補間処理を行うスクリプトです。
 
 
 """
@@ -58,8 +58,12 @@ app_name = app_path.stem
 # アプリケーションのホームディレクトリはこのファイルからみて一つ上
 app_home = app_path.parent.joinpath('..').resolve()
 
-# ディレクトリ
+# データディレクトリ
 data_dir = app_home.joinpath("data")
+
+# 出力画像ファイルを保存するディレクトリ
+image_dir = app_home.joinpath("img")
+image_dir.mkdir(exist_ok=True)
 
 #
 # ログ設定
@@ -104,18 +108,17 @@ stdout_handler.setLevel(logging.INFO)
 logger.addHandler(stdout_handler)
 
 # ログファイルのハンドラ
-USE_FILE_HANDLER = True
-if USE_FILE_HANDLER:
-    file_handler = logging.FileHandler(os.path.join(log_dir, log_file), 'a+')
-    file_handler.setFormatter(formatter)
-    file_handler.setLevel(logging.INFO)
-    logger.addHandler(file_handler)
+file_handler = logging.FileHandler(os.path.join(log_dir, log_file), 'a+')
+file_handler.setFormatter(formatter)
+file_handler.setLevel(logging.INFO)
+logger.addHandler(file_handler)
 
 #
 # ここからスクリプト
 #
 
-def process_kriging(df: pd.DataFrame):
+
+def __process_kriging(df: pd.DataFrame):
 
     N_TILES_PER_SIDE = 5 # 1辺あたりのタイル数 (合計 5x5 = 25領域に分割)
 
@@ -227,6 +230,129 @@ def process_kriging(df: pd.DataFrame):
         print("\n補間可能なデータ領域がありませんでした。")
 
 
+def init_quadtree(df: pd.DataFrame) -> Quadtree:
+    # lat, lonの最大・最小
+    min_lat = df['lat'].min()
+    max_lat = df['lat'].max()
+    min_lon = df['lon'].min()
+    max_lon = df['lon'].max()
+
+    # 中央座標を求める
+    mid_lat = (min_lat + max_lat) / 2.0
+    mid_lon = (min_lon + max_lon) / 2.0
+
+    # ルートになる四分木の境界を正方形で設定
+    square_size = max(max_lat - mid_lat, max_lon - mid_lon)
+    bounds = (mid_lat - square_size, mid_lon - square_size, mid_lat + square_size, mid_lon + square_size)
+
+    # 四分木を初期化
+    quadtree = Quadtree(bounds)
+
+    # 四分木にデータを挿入
+    for _, row in df.iterrows():
+        point = {'lat': row['lat'], 'lon': row['lon'], 'depth': row['depth']}
+        quadtree.insert(point)
+
+    return quadtree
+
+
+def aggregate_leaf_nodes(quadtree: Quadtree):
+    # 最も深いノードについては、そのノード内のポイントの平均値に置き換える
+    deepest_level = quadtree.get_deepest_level()
+    nodes = [node for node in quadtree.get_leaf_nodes() if node.level == deepest_level and len(node.points) > 1]
+    for node in nodes:
+        avg_point = node.average()
+        node.points = [avg_point]
+
+# データ補間
+# ポイントのない葉ノードについては、隣接ノードに値があればその平均値で埋める
+def interpolate_empty_leaf_nodes(quadtree: Quadtree):
+    deepest_level = quadtree.get_deepest_level()
+    empty_leaf_nodes = quadtree.get_empty_leaf_nodes()
+    for node in empty_leaf_nodes:
+
+        if node.level < deepest_level - 3:
+            # 深さが浅いノードは無視
+            continue
+
+        # 隣接ノードに格納されているポイントを収集
+        neighbor_points = []
+
+        # ノードの中心座標
+        mid_lat, mid_lon = node.center
+
+        # 8方向の隣接ノードをチェック
+        directions = [
+            (mid_lat - node.lat_length, mid_lon - node.lon_length),  # NW
+            (mid_lat - node.lat_length, mid_lon),                    # N
+            (mid_lat - node.lat_length, mid_lon + node.lon_length),  # NE
+            (mid_lat, mid_lon - node.lon_length),                    # W
+            (mid_lat, mid_lon + node.lon_length),                    # E
+            (mid_lat + node.lat_length, mid_lon - node.lon_length),  # SW
+            (mid_lat + node.lat_length, mid_lon),                    # S
+            (mid_lat + node.lat_length, mid_lon + node.lon_length)   # SE
+        ]
+
+        # 8方向の隣接ノードを取得
+        for d_lat, d_lon in directions:
+            neighbor_node = quadtree.get_leaf_node_by_point(d_lat, d_lon)
+            if neighbor_node and len(neighbor_node.points) > 0:
+                neighbor_points.extend(neighbor_node.points)
+
+        # 平均値で埋める
+        #if len(neighbor_points) > 3:
+        #  avg_lat, avg_lon, avg_depth = average_interpolate_value(mid_lat, mid_lon, neighbor_points)
+        #  node.points.append({'lat': avg_lat, 'lon': avg_lon, 'depth': avg_depth})
+
+        # IDW補間 (inverse distance weighted algorithm)
+        if len(neighbor_points) > 3:
+            avg_lat, avg_lon, avg_depth = idw_interpolate_value(mid_lat, mid_lon, neighbor_points)
+            node.points.append({'lat': avg_lat, 'lon': avg_lon, 'depth': avg_depth})
+
+        # TODO: 平均ではなくクリギングなどの高度な補間手法を使う
+
+
+def average_interpolate_value(neighbor_points):
+    """
+    単純平均で値を補間する
+    target_lat, target_lon: 補間したい座標
+    neighbor_points: {'lat', 'lon', 'depth'}を持つ辞書のリスト
+    戻り値: (lat, lon, depth) の補間値
+    """
+    if not neighbor_points:
+        return None, None, None
+    avg_lat = sum(p['lat'] for p in neighbor_points) / len(neighbor_points)
+    avg_lon = sum(p['lon'] for p in neighbor_points) / len(neighbor_points)
+    avg_depth = sum(p['depth'] for p in neighbor_points) / len(neighbor_points)
+    return avg_lat, avg_lon, avg_depth
+
+
+def idw_interpolate_value(target_lat, target_lon, neighbor_points, power=2):
+    """
+    inverse distance weighted (IDW) algorithm で値を補間する
+    target_lat, target_lon: 補間したい座標
+    neighbor_points: {'lat', 'lon', 'depth'}を持つ辞書のリスト
+    power: 距離のべき乗（通常は2）
+    戻り値: (lat, lon, depth) の補間値
+    """
+    weights = []
+    values = []
+    for p in neighbor_points:
+        dist = ((target_lat - p['lat'])**2 + (target_lon - p['lon'])**2)**0.5
+        if dist == 0:
+            # 距離0ならその値をそのまま使う
+            return p['lat'], p['lon'], p['depth']
+        w = 1.0 / (dist ** power)
+        weights.append(w)
+        values.append(p['depth'])
+    if not weights:
+        return None, None, None
+    depth_idw = np.average(values, weights=weights)
+    avg_lat = np.average([p['lat'] for p in neighbor_points], weights=weights)
+    avg_lon = np.average([p['lon'] for p in neighbor_points], weights=weights)
+    return avg_lat, avg_lon, depth_idw
+
+
 
 
 if __name__ == '__main__':
@@ -258,9 +384,51 @@ if __name__ == '__main__':
         output_filename = args.output
         output_file_path = Path(data_dir, output_filename)
 
+        # CSVファイルをPandasのデータフレームとして読み込む
+        try:
+            df = pd.read_csv(input_file_path)
+            logger.info(f"describe() --- 入力データ\n{df.describe().to_markdown()}\n")
+        except Exception as e:
+            logger.error(f"CSVファイルの読み込みに失敗しました：{str(e)}")
+            return
 
+        # 四分木を初期化
+        quadtree = init_quadtree(df)
 
+        # 四分木の統計情報を表示する
+        logger.info(f"Initial Quadtree stats\n{quadtree.get_stats_text()}\n")
 
+        # データ集約
+        # 最も深いノードについては、そのノード内のポイントの平均値に置き換えることでデータを減らす
+        aggregate_leaf_nodes(quadtree)
+
+        # 集約後の四分木の統計情報を表示する
+        logger.info(f"Aggregated Quadtree stats\n{quadtree.get_stats_text()}\n")
+
+        # データ補間
+        # ポイントのない葉ノードについては、隣接ノードに値があればその平均値で埋める
+        interpolate_empty_leaf_nodes(quadtree)
+
+        # 補間した四分木の統計情報を表示する
+        logger.info(f"Extended Quadtree stats\n{quadtree.get_stats_text()}\n")
+
+        # 点群をファイルに保存する
+        points = []
+        for node in quadtree.get_leaf_nodes():
+            points.extend(node.points)
+        logger.info(f"Points count: {len(points)}")
+
+        # CSVファイルに保存する
+        with open(output_file_path, 'w') as f:
+            f.write("lat,lon,depth\n")
+            for p in points:
+                f.write(f"{p['lat']},{p['lon']},{p['depth']}\n")
+        logger.info(f"Points data saved to: {output_file_path}")
+
+        # 四分木の可視化画像を保存する
+        output_image_filename = f"{input_file_path.stem}_qtree.png"
+        output_image_path = image_dir.joinpath(output_image_filename)
+        #save_quadtree_image(quadtree=quadtree, filename=output_image_path, draw_points=False)
 
     #
     # 実行

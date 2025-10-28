@@ -116,7 +116,7 @@ export class Main {
     xzScale: 10000,  // これは仮の値で、CSVデータを読み込んだ後に正規化する
 
     // 水深データのCSVファイルのURL
-    depthMapPath: "./static/data/aggregated_data.csv",
+    depthMapPath: "./static/data/processed_data.csv",
 
     // CSVテキストをパースして作成するデータ配列
     // 画面表示に適した値に正規化するのでCSVの値とは異なることに注意
