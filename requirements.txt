@@ -14,7 +14,7 @@ scipy
 scikit-learn
 
 # for spatial indexing
-rtree
+# rtree
 
 # for Jupyter Notebook
 jupyter
