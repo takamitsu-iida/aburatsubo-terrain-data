@@ -6,7 +6,7 @@ help:
 # dataディレクトリにあるCSVファイルを処理する
 
 # 入力ファイル名(data/は含まず、ファイル名のみを指定)
-DATA_FILENAME = ALL_depth_map_data_202502.csv
+DATA_FILENAME = ALL_depth_map_data_202510.csv
 DATA_BASENAME = $(basename $(DATA_FILENAME))
 
 DEDUP=_dd
