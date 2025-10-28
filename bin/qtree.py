@@ -22,9 +22,14 @@ warnings.filterwarnings(action="ignore", category=UserWarning, module=r"numpy.*"
 # 外部ライブラリのインポート
 #
 try:
+    import pandas as pd
     import matplotlib.pyplot as plt
-    from tabulate import tabulate
+
+    # GPS座標から距離を計算
     from geopy.distance import distance
+
+    # データを整形して表示
+    from tabulate import tabulate
 except ImportError as e:
     print(f"必要なライブラリがインストールされていません: {e}")
     sys.exit(1)
@@ -569,12 +574,43 @@ if __name__ == '__main__':
             logger.error("File not found: %s" % data_path)
             return
 
+
+        """
         data, data_stats = read_csv(data_path)
 
         #           lat         lon      depth
         # ---  ---------  ----------  ---------
         # min  35.157248  139.598684   1.082000
         # max  35.173733  139.621782  47.539000
+        """
+
+        #
+        # read_csv()ではなく、pandasのデータフレームを使う場合
+        #
+
+        # CSVファイルをPandasのデータフレームとして読み込む
+        try:
+            df = pd.read_csv(data_path)
+            logger.info(f"describe() --- 入力データ\n{df.describe().to_markdown()}\n")
+        except Exception as e:
+            logger.error(f"CSVファイルの読み込みに失敗しました：{str(e)}")
+            return
+
+        # データフレームから統計情報を取得
+        data_stats = {
+            'lat': {
+                'min': df['lat'].min(),
+                'max': df['lat'].max()
+            },
+            'lon': {
+                'min': df['lon'].min(),
+                'max': df['lon'].max()
+            },
+            'depth': {
+                'min': df['depth'].min(),
+                'max': df['depth'].max()
+            }
+        }
 
         # 中央座標を求める
         mid_lat = (data_stats['lat']['min'] + data_stats['lat']['max']) / 2.0
@@ -593,9 +629,16 @@ if __name__ == '__main__':
         quadtree = Quadtree(bounds)
 
         # データを四分木に挿入
+        """
         for row in data:
             lat, lon, depth = row
             point = {'lat': lat, 'lon': lon, 'depth': depth}
+            quadtree.insert(point)
+        """
+
+        # データを四分木に挿入
+        for _, row in df.iterrows():
+            point = {'lat': row['lat'], 'lon': row['lon'], 'depth': row['depth']}
             quadtree.insert(point)
 
         # 四分木の統計情報を表示する
