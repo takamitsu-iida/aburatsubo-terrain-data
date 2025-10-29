@@ -10,12 +10,11 @@ DeeperのGPSデータのCSVファイルを入出力するスクリプトです�
 #
 # 標準ライブラリのインポート
 #
-import argparse
 import logging
 import sys
 
 from pathlib import Path
-from typing import List, Tuple, Optional, Dict, Any
+from typing import Dict, List, Tuple, Dict  # , Any, Optional
 
 # WSL1 固有の numpy 警告を抑制
 # https://github.com/numpy/numpy/issues/18900
@@ -122,11 +121,10 @@ def read_csv(file_path: Path) -> Tuple[List[List[float]], Dict[str, Dict[str, fl
     return data, stats
 
 
-
 def load_csv(input_data_path: Path) -> pd.DataFrame | None:
     # 入力CSVファイルをPandasのデータフレームとして読み込む
     try:
-        # CSVファイルに列名がないので、header=Noneを指定して読み込む
+        # CSVファイルに列名はない前提なのでheader=Noneを指定して読み込む
         df = pd.read_csv(input_data_path, header=None)
 
         # データフレームに列名を定義
@@ -136,84 +134,32 @@ def load_csv(input_data_path: Path) -> pd.DataFrame | None:
             df.columns = ["lat", "lon", "depth", "time"]
             del df["time"]
         else:
-            logger.error(f"CSVファイルの列数が3または4ではありません（{df.shape[1]}列）")
-            return
+            return None
     except Exception as e:
-        logger.error(f"CSVファイルの読み込みに失敗しました：{str(e)}")
-        return
+        return None
+    return df
 
 
-
-def save_csv(df: pd.DataFrame, output_filename: str) -> None:
-    #
+def save_csv(df: pd.DataFrame, output_file_path: Path) -> None:
     # データフレームをCSVファイルに保存する
-    #
     try:
         df.to_csv(output_file_path, index=False, header=False)
-        logger.info(f"外れ値を除去したデータフレームを保存しました: {output_filename}")
     except Exception as e:
-        logger.error(f"CSVファイルの保存に失敗しました：{str(e)}")
+        logging.error(f"CSVファイルの保存に失敗しました：{str(e)}")
 
 
+def save_points_as_csv(points: List[Dict[str, float]], output_file_path: Path) -> None:
+    """
+    座標のリストをCSVファイルに保存する。
 
-
-
-if __name__ == '__main__':
-
-    def main() -> None:
-        # 引数処理
-        parser = argparse.ArgumentParser(description=SCRIPT_DESCRIPTION)
-        parser.add_argument('--input', type=str, required=True, help='dataディレクトリ直下の入力CSVファイル名')
-        parser.add_argument('--output', type=str, required=True, help='dataディレクトリ直下の出力CSVファイル名')
-        args = parser.parse_args()
-
-        # 引数が何も指定されていない場合はhelpを表示して終了
-        if not any(vars(args).values()):
-            parser.print_help()
-            return
-
-        # 保存先のファイル名が指定されていない場合は終了
-        if not args.output:
-            logger.error("出力ファイル名が指定されていません。")
-            return
-
-        # 入力ファイルのパス
-        input_file_path = Path(data_dir, args.input)
-        if not input_file_path.exists():
-            logger.error(f"入力ファイルが存在しません: {input_file_path}")
-            return
-
-        # 出力ファイルの名前とパス
-        output_filename = args.output
-        output_file_path = Path(data_dir, output_filename)
-
-
-        # 読み込んだデータのサマリを表示する
-        # to_markdown()
-        # を使うにはtabulate moduleが必要
-
-        # head(3)
-        logger.info(f"head(3)\n{df.head(3).to_markdown()}\n")
-
-        # tail(3)
-        logger.info(f"tail(3)\n{df.tail(3).to_markdown()}\n")
-
-        # describe()
-        logger.info(f"describe() --- 削除前\n{df.describe().to_markdown()}\n")
-
-        # 重複した座標のデータを削除する
-        df = process_duplicates(df)
-
-        logger.info(f"describe() --- 削除後\n{df.describe().to_markdown()}\n")
-
-        # 重複削除後のデータをCSVファイルとして保存
-        try:
-            df.to_csv(output_file_path, index=False, header=False)
-            logger.info(f"重複削除後のデータを保存しました: {output_filename}")
-        except Exception as e:
-            logger.error(f"CSVファイルの保存に失敗しました：{str(e)}")
-
-    #
-    # 実行
-    #
-    main()
+    Args:
+        points: List of dictionaries containing {'lat': ..., 'lon': ..., 'depth': ...}.
+        output_file_path: Path to the output CSV file.
+    """
+    try:
+        with output_file_path.open('w') as f:
+            for p in points:
+                line = f"{p['lat']},{p['lon']},{p['depth']}\n"
+                f.write(line)
+    except Exception as e:
+        logging.error(f"CSVファイルの保存に失敗しました：{str(e)}")

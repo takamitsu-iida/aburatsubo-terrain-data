@@ -41,6 +41,14 @@ except ImportError as e:
     logging.error("必要なモジュールがインストールされていません。pandasおよびscikit-learnをインストールしてください。")
     sys.exit(1)
 
+#
+# ローカルファイルからインポート
+#
+try:
+    from load_save_csv import load_csv, save_csv
+except ImportError as e:
+    logging.error("load_save_csv module is not found. Please make sure load_save_csv.py is in the same directory.")
+    sys.exit(1)
 
 # このファイルへのPathオブジェクト
 app_path = Path(__file__)
@@ -242,21 +250,9 @@ if __name__ == '__main__':
         output_file_path = Path(data_dir, output_filename)
 
         # 入力CSVファイルをPandasのデータフレームとして読み込む
-        try:
-            # CSVファイルに列名がないので、header=Noneを指定して読み込む
-            df = pd.read_csv(input_file_path, header=None)
-
-            # データフレームに列名を定義
-            if df.shape[1] == 3:
-                df.columns = ["lat", "lon", "depth"]
-            elif df.shape[1] == 4:
-                df.columns = ["lat", "lon", "depth", "time"]
-                del df["time"]
-            else:
-                logger.error(f"CSVファイルの列数が3または4ではありません（{df.shape[1]}列）")
-                return
-        except Exception as e:
-            logger.error(f"CSVファイルの読み込みに失敗しました：{str(e)}")
+        df = load_csv(input_file_path)
+        if df is None:
+            logger.error(f"CSVファイルの読み込みに失敗しました: {input_file_path}")
             return
 
         #
@@ -281,11 +277,8 @@ if __name__ == '__main__':
         #
         # 外れ値を除去したデータフレームをCSVファイルに保存する
         #
-        try:
-            df.to_csv(output_file_path, index=False, header=False)
-            logger.info(f"外れ値を除去したデータフレームを保存しました: {output_filename}")
-        except Exception as e:
-            logger.error(f"CSVファイルの保存に失敗しました：{str(e)}")
+        save_csv(df, output_file_path)
+        logger.info(f"外れ値を除去したデータフレームを保存しました: {output_filename}")
 
     #
     # 実行

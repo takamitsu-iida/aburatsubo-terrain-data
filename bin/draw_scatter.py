@@ -23,6 +23,25 @@ from pathlib import Path
 import warnings
 warnings.filterwarnings(action="ignore", category=UserWarning, module=r"numpy.*", message=r"Signature b")
 
+#
+# 外部ライブラリのインポート
+#
+try:
+    import pandas as pd
+    import matplotlib.pyplot as plt
+except ImportError as e:
+    logging.exception(e)
+    sys.exit(1)
+
+#
+# ローカルファイルからインポート
+#
+try:
+    from load_save_csv import load_csv
+except ImportError as e:
+    logging.error(f"module import error: {e}")
+    sys.exit(1)
+
 # このファイルへのPathオブジェクト
 app_path = Path(__file__)
 
@@ -88,16 +107,6 @@ file_handler.setLevel(logging.INFO)
 logger.addHandler(file_handler)
 
 #
-# 外部ライブラリのインポート
-#
-try:
-    import pandas as pd
-    import matplotlib.pyplot as plt
-except ImportError as e:
-    logger.exception(e)
-    sys.exit(1)
-
-#
 # ここからスクリプト
 #
 
@@ -147,21 +156,9 @@ if __name__ == '__main__':
         output_image_path = image_dir.joinpath(output_image_name)
 
         # 入力CSVファイルをPandasのデータフレームとして読み込む
-        try:
-            # CSVファイルに列名がないので、header=Noneを指定して読み込む
-            df = pd.read_csv(input_file_path, header=None)
-
-            # データフレームに列名を定義
-            if df.shape[1] == 3:
-                df.columns = ["lat", "lon", "depth"]
-            elif df.shape[1] == 4:
-                df.columns = ["lat", "lon", "depth", "time"]
-                del df["time"]
-            else:
-                logger.error(f"CSVファイルの列数が3または4ではありません（{df.shape[1]}列）")
-                return
-        except Exception as e:
-            logger.error(f"CSVファイルの読み込みに失敗しました：{str(e)}")
+        df = load_csv(input_file_path)
+        if df is None:
+            logger.error("CSVファイルの読み込みに失敗しました")
             return
 
         # 散布図を保存
