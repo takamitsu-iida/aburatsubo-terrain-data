@@ -1,3 +1,7 @@
+"""
+このファイルは、実用はしていない、雑多なコードです
+ちょっと試すときに使います
+"""
 
 #
 # 標準ライブラリのインポート
@@ -407,6 +411,4 @@ def main():
     # CSVファイルに保存、ファイル名はdata.csvで固定
     # 外部からみたこのファイルのURLはこれ
     # https://takamitsu-iida.github.io/aburatsubo-terrain-data/data/data.csv
-    df.to_csv(os.path.join(data_dir, "data.csv"), index=False)
-
-    return 0
+    df.to_csv(os.path.join(data_dir, "data.csv"), index=False, header=False)

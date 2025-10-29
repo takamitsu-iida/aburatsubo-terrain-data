@@ -30,6 +30,9 @@ all: dd ol ip mf ## 重複排除→外れ値除去→補間→メディアンフ
 	@cp data/$(DATA_BASENAME)$(DEDUP)$(OUTLIER)$(INTERPOLATE)$(MEDIAN_FILTER).csv static/data/processed_data.csv
 
 scatter: ## 散布図を作成する
+	@if [ -f data/$(DATA_BASENAME).csv ]; then \
+		python3 bin/draw_scatter.py --input $(DATA_BASENAME).csv --title "Original"; \
+	fi
 	@if [ -f data/$(DATA_BASENAME)$(DEDUP).csv ]; then \
 		python3 bin/draw_scatter.py --input $(DATA_BASENAME)$(DEDUP).csv --title "Deduplicated"; \
 	fi

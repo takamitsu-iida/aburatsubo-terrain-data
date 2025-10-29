@@ -146,10 +146,20 @@ if __name__ == '__main__':
         # 出力するイメージファイルのフルパス
         output_image_path = image_dir.joinpath(output_image_name)
 
-        # CSVファイルをPandasのデータフレームとして読み込む
+        # 入力CSVファイルをPandasのデータフレームとして読み込む
         try:
-            df = pd.read_csv(input_file_path)
-            logger.info(f"describe()\n{df.describe().to_markdown()}")
+            # CSVファイルに列名がないので、header=Noneを指定して読み込む
+            df = pd.read_csv(input_file_path, header=None)
+
+            # データフレームに列名を定義
+            if df.shape[1] == 3:
+                df.columns = ["lat", "lon", "depth"]
+            elif df.shape[1] == 4:
+                df.columns = ["lat", "lon", "depth", "time"]
+                del df["time"]
+            else:
+                logger.error(f"CSVファイルの列数が3または4ではありません（{df.shape[1]}列）")
+                return
         except Exception as e:
             logger.error(f"CSVファイルの読み込みに失敗しました：{str(e)}")
             return

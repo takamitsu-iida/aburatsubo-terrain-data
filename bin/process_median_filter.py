@@ -160,10 +160,20 @@ if __name__ == '__main__':
         output_filename = args.output
         output_file_path = Path(data_dir, output_filename)
 
-        # CSVファイルをPandasのデータフレームとして読み込む
+        # 入力CSVファイルをPandasのデータフレームとして読み込む
         try:
-            df = pd.read_csv(input_file_path)
-            logger.info(f"describe() --- 入力データ\n{df.describe().to_markdown()}\n")
+            # CSVファイルに列名がないので、header=Noneを指定して読み込む
+            df = pd.read_csv(input_file_path, header=None)
+
+            # データフレームに列名を定義
+            if df.shape[1] == 3:
+                df.columns = ["lat", "lon", "depth"]
+            elif df.shape[1] == 4:
+                df.columns = ["lat", "lon", "depth", "time"]
+                del df["time"]
+            else:
+                logger.error(f"CSVファイルの列数が3または4ではありません（{df.shape[1]}列）")
+                return
         except Exception as e:
             logger.error(f"CSVファイルの読み込みに失敗しました：{str(e)}")
             return
@@ -178,7 +188,7 @@ if __name__ == '__main__':
         # データフレームをCSVファイルに保存する
         #
         try:
-            df.to_csv(output_file_path, index=False)
+            df.to_csv(output_file_path, index=False, header=False)
             logger.info(f"メディアンフィルタを適用したデータフレームを保存しました: {output_filename}")
         except Exception as e:
             logger.error(f"CSVファイルの保存に失敗しました：{str(e)}")

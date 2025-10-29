@@ -2,41 +2,15 @@
 
 <br>
 
-**2025 Oct**
+2025/05/02 depth_map_data.csv (processed)
 
-depth_map_data.csv
-
-<br>
-
-|       |            lat |             lon |        depth |
-|:------|---------------:|----------------:|-------------:|
-| count | 164979         | 164979          | 164979       |
-| mean  |     35.164     |    139.607      |     17.0116  |
-| std   |      0.0021361 |      0.00418346 |      9.74208 |
-| min   |     35.1572    |    139.554      |      1.082   |
-| 25%   |     35.1628    |    139.604      |      8.899   |
-| 50%   |     35.1639    |    139.607      |     15.333   |
-| 75%   |     35.1649    |    139.609      |     24.071   |
-| max   |     35.1797    |    139.622      |     47.539   |
+https://takamitsu-iida.github.io/aburatsubo-terrain-data/data/ALL_depth_map_data_202502_dd_ol_ip_mf.csv
 
 <br>
 
-[before processing](/data/ALL_depth_map_data_202510.csv)
+3D Visualization
 
-<br>
-
-[after processing](/data/ALL_depth_map_data_202510_dd_ol_ip_mf.csv)
-
-<br>
-
-[3D Visualization](https://takamitsu-iida.github.io/aburatsubo-terrain-data/index-processed-data.html)
-
-<br><br><br>
-
-
-
-
-
+https://takamitsu-iida.github.io/aburatsubo-terrain-data/index-processed-data.html
 
 
 <br><br>

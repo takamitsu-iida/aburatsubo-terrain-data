@@ -2,13 +2,10 @@
 # -*- coding: utf-8 -*-
 
 """
-DeeperのGPSデータを入力として受け取り、重複する座標データを削除した新しいCSVファイルを作成するスクリプトです。
+DeeperのGPSデータのCSVファイルを入出力するスクリプトです。
 
 
 """
-
-# スクリプトを引数無しで実行したときのヘルプに使うデスクリプション
-SCRIPT_DESCRIPTION = 'drop duplicate coordinates from Deeper GPS data'
 
 #
 # 標準ライブラリのインポート
@@ -50,86 +47,61 @@ app_home = app_path.parent.joinpath('..').resolve()
 data_dir = app_home.joinpath("data")
 
 #
-# ログ設定
-#
-
-# ログファイルの名前
-log_file = f"{app_name}.log"
-
-# ログファイルを置くディレクトリ
-log_dir = app_home.joinpath("log")
-log_dir.mkdir(exist_ok=True)
-
-# ロギングの設定
-# レベルはこの順で下にいくほど詳細になる
-#   logging.CRITICAL
-#   logging.ERROR
-#   logging.WARNING --- 初期値はこのレベル
-#   logging.INFO
-#   logging.DEBUG
-#
-# ログの出力方法
-# logger.debug("debugレベルのログメッセージ")
-# logger.info("infoレベルのログメッセージ")
-# logger.warning("warningレベルのログメッセージ")
-
-# ロガーを取得
-logger = logging.getLogger(__name__)
-
-# ログレベル設定
-logger.setLevel(logging.INFO)
-
-# フォーマット
-formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
-
-# 標準出力へのハンドラ
-stdout_handler = logging.StreamHandler(sys.stdout)
-stdout_handler.setFormatter(formatter)
-stdout_handler.setLevel(logging.INFO)
-logger.addHandler(stdout_handler)
-
-# ログファイルのハンドラ
-file_handler = logging.FileHandler(log_dir.joinpath(log_file), 'a+')
-file_handler.setFormatter(formatter)
-file_handler.setLevel(logging.INFO)
-logger.addHandler(file_handler)
-
-#
 # ここからスクリプト
 #
 
-def read_file(filename, callback):
+def read_file_lines(file_path: Path, callback: callable) -> list[str] | None:
+    lines = []
     try:
-        with open(filename) as f:
+        with file_path.open() as f:
             for line in f:
                 line = line.rstrip()
-                callback(line)
+                lines.append(line)
+                if callback:
+                    callback(line)
     except IOError as e:
-        logger.exception(e)
+        logging.exception(f"ファイルの読み込みに失敗しました: {file_path} - {str(e)}")
+        return None
+    return lines
 
 
-def line_callback(line):
+def line_callback(line: str) -> None:
     print(line)
 
 
-def load_csv(data_path):
+def load_csv(input_data_path: Path) -> pd.DataFrame | None:
+    # 入力CSVファイルをPandasのデータフレームとして読み込む
     try:
-        return pd.read_csv(data_path)
-    except:
-        return None
+        # CSVファイルに列名がないので、header=Noneを指定して読み込む
+        df = pd.read_csv(input_data_path, header=None)
+
+        # データフレームに列名を定義
+        if df.shape[1] == 3:
+            df.columns = ["lat", "lon", "depth"]
+        elif df.shape[1] == 4:
+            df.columns = ["lat", "lon", "depth", "time"]
+            del df["time"]
+        else:
+            logger.error(f"CSVファイルの列数が3または4ではありません（{df.shape[1]}列）")
+            return
+    except Exception as e:
+        logger.error(f"CSVファイルの読み込みに失敗しました：{str(e)}")
+        return
 
 
-def process_duplicates(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    (lat, lon)が重複した行については、depthの平均値を取り、(lat, lon, depth)で1行だけ残す。
-    """
-    before = len(df)
-    # groupbyで(lat, lon)ごとにdepthの平均を計算
-    df_uniq = df.groupby(['lat', 'lon'], as_index=False)['depth'].mean()
-    after = len(df_uniq)
-    removed = before - after
-    logger.info(f"重複排除前: {before}件, 排除後: {after}件, 排除数: {removed}件")
-    return df_uniq
+
+def save_csv(df: pd.DataFrame, output_filename: str) -> None:
+    #
+    # データフレームをCSVファイルに保存する
+    #
+    try:
+        df.to_csv(output_file_path, index=False, header=False)
+        logger.info(f"外れ値を除去したデータフレームを保存しました: {output_filename}")
+    except Exception as e:
+        logger.error(f"CSVファイルの保存に失敗しました：{str(e)}")
+
+
+
 
 
 if __name__ == '__main__':
@@ -161,23 +133,6 @@ if __name__ == '__main__':
         output_filename = args.output
         output_file_path = Path(data_dir, output_filename)
 
-        # 入力CSVファイルをPandasのデータフレームとして読み込む
-        try:
-            # CSVファイルに列名がないので、header=Noneを指定して読み込む
-            df = pd.read_csv(input_file_path, header=None)
-
-            # データフレームに列名を定義
-            if df.shape[1] == 3:
-                df.columns = ["lat", "lon", "depth"]
-            elif df.shape[1] == 4:
-                df.columns = ["lat", "lon", "depth", "time"]
-                del df["time"]
-            else:
-                logger.error(f"CSVファイルの列数が3または4ではありません（{df.shape[1]}列）")
-                return
-        except Exception as e:
-            logger.error(f"CSVファイルの読み込みに失敗しました：{str(e)}")
-            return
 
         # 読み込んだデータのサマリを表示する
         # to_markdown()
