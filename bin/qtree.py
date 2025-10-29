@@ -441,56 +441,6 @@ def get_latlon_delta(lat: float, lon: float, meters: float = 1.0) -> tuple[float
     return delta_lat, delta_lon
 
 
-def read_csv(filepath) -> Tuple[List[List[float]], Dict[str, Dict[str, float]]]:
-    """
-    CSVファイルを読み込み、データのリストと各カラム（lat, lon, depth）の最大・最小値を返す。
-
-    Returns:
-        data: List[List[float]]
-        stats: Dict[str, Dict[str, float]]
-            例:
-              {
-                'lat': {'min': ..., 'max': ...},
-                'lon': {'min': ..., 'max': ...},
-                'depth': {'min': ..., 'max': ...}
-              }
-    """
-    data = []
-    min_lat = float('inf')
-    max_lat = float('-inf')
-    min_lon = float('inf')
-    max_lon = float('-inf')
-    min_depth = float('inf')
-    max_depth = float('-inf')
-
-    with open(filepath, 'r') as f:
-        for line in f:
-            try:
-                lat, lon, depth = [float(x) for x in line.strip().split(',')[:3]]
-            except ValueError:
-                continue
-            data.append([lat, lon, depth])
-            min_lat = min(min_lat, lat)
-            max_lat = max(max_lat, lat)
-            min_lon = min(min_lon, lon)
-            max_lon = max(max_lon, lon)
-            min_depth = min(min_depth, depth)
-            max_depth = max(max_depth, depth)
-
-    stats = {
-        'lat': {'min': min_lat, 'max': max_lat},
-        'lon': {'min': min_lon, 'max': max_lon},
-        'depth': {'min': min_depth, 'max': max_depth}
-    }
-
-    table = [
-        ["min", stats['lat']['min'], stats['lon']['min'], stats['depth']['min']],
-        ["max", stats['lat']['max'], stats['lon']['max'], stats['depth']['max']],
-    ]
-    headers = ["", "lat", "lon", "depth"]
-    logger.info(f"read_csv() {filepath}\n{tabulate(table, headers=headers, floatfmt='.6f')}\n")
-
-    return data, stats
 
 
 def save_quadtree_image(

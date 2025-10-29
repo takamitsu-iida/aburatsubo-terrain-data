@@ -15,6 +15,7 @@ import logging
 import sys
 
 from pathlib import Path
+from typing import List, Tuple, Optional, Dict, Any
 
 # WSL1 固有の numpy 警告を抑制
 # https://github.com/numpy/numpy/issues/18900
@@ -26,10 +27,10 @@ warnings.filterwarnings(action="ignore", category=UserWarning, module=r"numpy.*"
 #
 try:
     import pandas as pd
+    from tabulate import tabulate
 except ImportError as e:
     logging.error("pandas module is not installed. Please install pandas to use this script.")
     sys.exit(1)
-
 
 # このファイルへのPathオブジェクト
 app_path = Path(__file__)
@@ -67,6 +68,59 @@ def read_file_lines(file_path: Path, callback: callable) -> list[str] | None:
 
 def line_callback(line: str) -> None:
     print(line)
+
+
+def read_csv(file_path: Path) -> Tuple[List[List[float]], Dict[str, Dict[str, float]]]:
+    """
+    CSVファイルを読み込み、データのリストと各カラム（lat, lon, depth）の最大・最小値を返す。
+
+    Returns:
+        data: List[List[float]]
+        stats: Dict[str, Dict[str, float]]
+            例:
+              {
+                'lat': {'min': ..., 'max': ...},
+                'lon': {'min': ..., 'max': ...},
+                'depth': {'min': ..., 'max': ...}
+              }
+    """
+    data = []
+    min_lat = float('inf')
+    max_lat = float('-inf')
+    min_lon = float('inf')
+    max_lon = float('-inf')
+    min_depth = float('inf')
+    max_depth = float('-inf')
+
+    with file_path.open() as f:
+        for line in f:
+            try:
+                lat, lon, depth = [float(x) for x in line.strip().split(',')[:3]]
+            except ValueError:
+                continue
+            data.append([lat, lon, depth])
+            min_lat = min(min_lat, lat)
+            max_lat = max(max_lat, lat)
+            min_lon = min(min_lon, lon)
+            max_lon = max(max_lon, lon)
+            min_depth = min(min_depth, depth)
+            max_depth = max(max_depth, depth)
+
+    stats = {
+        'lat': {'min': min_lat, 'max': max_lat},
+        'lon': {'min': min_lon, 'max': max_lon},
+        'depth': {'min': min_depth, 'max': max_depth}
+    }
+
+    table = [
+        ["min", stats['lat']['min'], stats['lon']['min'], stats['depth']['min']],
+        ["max", stats['lat']['max'], stats['lon']['max'], stats['depth']['max']],
+    ]
+    headers = ["", "lat", "lon", "depth"]
+    logging.info(f"read_csv() {file_path}\n{tabulate(table, headers=headers, floatfmt='.6f')}\n")
+
+    return data, stats
+
 
 
 def load_csv(input_data_path: Path) -> pd.DataFrame | None:

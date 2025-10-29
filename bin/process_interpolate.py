@@ -43,7 +43,7 @@ except ImportError as e:
 #
 # 同じディレクトリにあるモジュールのインポート
 #
-from qtree import Quadtree, QuadtreeNode
+from qtree import Quadtree
 
 
 # このファイルへのPathオブジェクト
