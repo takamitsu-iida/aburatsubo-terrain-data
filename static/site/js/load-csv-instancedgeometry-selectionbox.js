@@ -125,11 +125,19 @@ export class Main {
 
   // CSV形式のテキストをパース
   parseCsv(text) {
-    const data = [];
+   // 行に分割
+    const lines = text.split('\n').filter(line => line.trim().length > 0);
 
-    const lines = text.split('\n');
-    const headers = lines[0].split(',');
-    for (let i = 1; i < lines.length; i++) {
+    // 先頭行が数字で始まる場合はヘッダ無しと判定
+    const firstLine = lines[0].trim();
+    const isHeader = isNaN(Number(firstLine.split(',')[0]));
+    const headers = isHeader ? lines[0].split(',').map(h => h.trim()) : ["lat", "lon", "depth"];
+
+    // データ開始行のインデックス
+    const startIdx = isHeader ? 1 : 0;
+
+    const data = [];
+    for (let i = startIdx; i < lines.length; i++) {
       const row = lines[i].split(',');
       if (row.length === headers.length) {
         const rowData = {};

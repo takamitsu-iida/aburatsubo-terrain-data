@@ -200,8 +200,17 @@ export class Main {
 
   // CSVデータをパースする関数
   parseCsv = (text) => {
-    const lines = text.split('\n');
-    const headers = lines[0].split(',');
+    // 行に分割
+    const lines = text.split('\n').filter(line => line.trim().length > 0);
+
+    // 先頭行が数字で始まる場合はヘッダ無しと判定
+    const firstLine = lines[0].trim();
+    const isHeader = isNaN(Number(firstLine.split(',')[0]));
+    const headers = isHeader ? lines[0].split(',').map(h => h.trim()) : ["lat", "lon", "depth"];
+
+    // データ開始行のインデックス
+    const startIdx = isHeader ? 1 : 0;
+
     const data = [];
 
     let minLat = 9999;
@@ -209,7 +218,7 @@ export class Main {
     let minLon = 9999;
     let maxLon = -9999;
 
-    for (let i = 1; i < lines.length; i++) {
+    for (let i = startIdx; i < lines.length; i++) {
       const row = lines[i].split(',');
       if (row.length === headers.length) {
         const rowData = {};
