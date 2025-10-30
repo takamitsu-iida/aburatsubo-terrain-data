@@ -441,8 +441,6 @@ def get_latlon_delta(lat: float, lon: float, meters: float = 1.0) -> tuple[float
     return delta_lat, delta_lon
 
 
-
-
 def save_quadtree_image(
     quadtree: 'Quadtree',
     filename: str,
@@ -514,7 +512,41 @@ def save_quadtree_image(
     plt.close(fig)
 
 
+def create_quadtree_from_df(df: pd.DataFrame) -> Quadtree:
+    """ PandasのDataFrameから四分木を作成して返す """
+
+    # データフレームから統計情報を取得
+    min_lat, max_lat = df['lat'].min(), df['lat'].max()
+    min_lon, max_lon = df['lon'].min(), df['lon'].max()
+
+    # 中央座標を求める
+    mid_lat = (min_lat + max_lat) / 2.0
+    mid_lon = (min_lon + max_lon) / 2.0
+
+    # ルートになる四分木の境界を正方形で設定
+    square_size = max(max_lat - mid_lat, max_lon - mid_lon)
+    bounds = (mid_lat - square_size, mid_lon - square_size, mid_lat + square_size, mid_lon + square_size)
+
+    # 四分木を初期化
+    quadtree = Quadtree(bounds)
+
+    # データを四分木に挿入
+    for _, row in df.iterrows():
+        quadtree.insert({'lat': row['lat'], 'lon': row['lon'], 'depth': row['depth']})
+
+    return quadtree
+
+
 if __name__ == '__main__':
+
+    import numpy as np
+    from pykrige.ok import OrdinaryKriging
+    from scipy.interpolate import griddata
+    from scipy.spatial import cKDTree
+
+    # ローカルファイルからインポート
+    from load_save_csv import load_csv, save_csv
+
 
     def misc():
         from geopy.distance import great_circle, distance
@@ -532,158 +564,140 @@ if __name__ == '__main__':
         print(f"5m四方の緯度差: {delta_lat:.8f}, 経度差: {delta_lon:.8f}")
 
 
+
+    def kriging_interpolate_leaf_nodes(quadtree, df, grid_size_m=10.0, points_per_tile=10):
+        """
+        四分木の葉ノードごとに、さらに小さなグリッドに分割してクリギング補間する
+        """
+
+        # 経度1度をメートル座標に変換
+        METERS_PER_DEG_LAT = 111000.0
+
+        # 緯度1度をメートル座標に変換
+        mean_lat = df['lat'].mean()
+        METERS_PER_DEG_LON = 111320.0 * np.cos(np.deg2rad(mean_lat))
+
+        # 経度1度をメートル座標に変換
+        METERS_PER_DEG_LAT = 111000.0
+
+        # 緯度1度をメートル座標に変換
+        # 緯度によって変わるので、df['lat']の平均値を使って経度1度あたりの距離を計算する
+        mean_lat = df['lat'].mean()
+        METERS_PER_DEG_LON = 111320.0 * np.cos(np.deg2rad(mean_lat))
+
+        # 座標をメートル単位に変換
+        x = df['lon'].values * METERS_PER_DEG_LON
+        y = df['lat'].values * METERS_PER_DEG_LAT
+        coords = np.column_stack([x, y])
+
+        kdtree = cKDTree(coords)
+
+        # 結果格納用のリスト
+        interpolated_results = []
+
+        # 葉ノードを取得
+        leaf_nodes = quadtree.get_leaf_nodes()
+
+        for node in leaf_nodes:
+            if len(node.points) < 4:
+                continue
+
+            # ノードの範囲
+            lat1, lon1, lat2, lon2 = node.bounds
+
+            # ノード内のデータ抽出
+            mask = (
+                (df['lat'] >= lat1) & (df['lat'] < lat2) &
+                (df['lon'] >= lon1) & (df['lon'] < lon2)
+            )
+            tile_df = df[mask]
+
+            # KDTreeで半径10m以内の点を抽出して追加する
+            """
+            node_center_lat = (lat1 + lat2) / 2.0
+            node_center_lon = (lon1 + lon2) / 2.0
+            node_center_x = node_center_lon * METERS_PER_DEG_LON
+            node_center_y = node_center_lat * METERS_PER_DEG_LAT
+            indices = kdtree.query_ball_point([node_center_x, node_center_y], r=10.0)
+            additional_points = df.iloc[indices]
+            tile_df = pd.concat([tile_df, additional_points]).drop_duplicates().reset_index(drop=True)
+            """
+
+            if len(tile_df) < 4:
+                continue
+
+            # メートル座標に変換
+            tile_x = tile_df['lon'].values * METERS_PER_DEG_LON
+            tile_y = tile_df['lat'].values * METERS_PER_DEG_LAT
+            tile_depths = tile_df['depth'].values
+
+            # グリッド分割数を計算（ノードのサイズをメートルに変換して分割数を決定）
+            width_m = distance((lat1, lon1), (lat1, lon2)).meters
+            height_m = distance((lat1, lon1), (lat2, lon1)).meters
+            n_x = max(2, int(width_m // grid_size_m))
+            n_y = max(2, int(height_m // grid_size_m))
+
+            grid_lon = np.linspace(lon1, lon2, n_x)
+            grid_lat = np.linspace(lat1, lat2, n_y)
+            grid_x = grid_lon * METERS_PER_DEG_LON
+            grid_y = grid_lat * METERS_PER_DEG_LAT
+
+            # クリギング補間
+            try:
+                OK = OrdinaryKriging(
+                    tile_x, tile_y, tile_depths,
+                    variogram_model='linear',
+                    verbose=False,
+                    enable_plotting=False
+                )
+                z, ss = OK.execute('grid', grid_x, grid_y)
+                grid_xx, grid_yy = np.meshgrid(grid_x, grid_y)
+                for xi, yi, zi in zip(grid_xx.flatten(), grid_yy.flatten(), z.flatten()):
+                    interpolated_results.append({
+                        'lon': xi / METERS_PER_DEG_LON,
+                        'lat': yi / METERS_PER_DEG_LAT,
+                        'depth': zi
+                    })
+            except Exception as e:
+                logger.warning(f"Kriging failed for node at bounds {node.bounds}: {e}")
+                continue
+
+        # 元のデータフレームと補間結果を結合
+        interpolated_df = pd.DataFrame(interpolated_results)
+        combined_df = pd.concat([df, interpolated_df], ignore_index=True)
+        return combined_df
+
+
+
+
     def main():
 
-        data_filename = "ALL_depth_map_data_202502_dd_ol.csv"
-
+        data_filename = "ALL_depth_map_data_202510_dd_ol.csv"
         data_path = data_dir.joinpath(data_filename)
         if not data_path.exists():
             logger.error("File not found: %s" % data_path)
             return
 
-        # read_csv()の方が速いが、PandasのDataFrameを使いたいのでそちらを使用
-        # data, data_stats = read_csv(data_path)
-
-        # CSVファイルをPandasのデータフレームとして読み込む
-        try:
-            df = pd.read_csv(data_path)
-            logger.info(f"describe() --- 入力データ\n{df.describe().to_markdown()}\n")
-        except Exception as e:
-            logger.error(f"CSVファイルの読み込みに失敗しました：{str(e)}")
+        # read_csv()を使った方が軽いが、PandasのDataFrameで処理を統一する
+        df = load_csv(data_path)
+        if df is None:
+            logger.error(f"データの読み込みに失敗しました: {data_path}")
             return
 
-        # データフレームから統計情報を取得
-        data_stats = {
-            'lat': {
-                'min': df['lat'].min(),
-                'max': df['lat'].max()
-            },
-            'lon': {
-                'min': df['lon'].min(),
-                'max': df['lon'].max()
-            },
-            'depth': {
-                'min': df['depth'].min(),
-                'max': df['depth'].max()
-            }
-        }
+        # 四分木を作成
+        Quadtree.MIN_GRID_WIDTH = 20.0  # 最小ノードの幅が20メートル以下になるように設定
+        quadtree = create_quadtree_from_df(df)
 
-        # 中央座標を求める
-        mid_lat = (data_stats['lat']['min'] + data_stats['lat']['max']) / 2.0
-        mid_lon = (data_stats['lon']['min'] + data_stats['lon']['max']) / 2.0
-
-        # ルートになる四分木の境界を正方形で設定
-        square_size = max(
-            mid_lat - data_stats['lat']['min'],
-            data_stats['lat']['max'] - mid_lat,
-            mid_lon - data_stats['lon']['min'],
-            data_stats['lon']['max'] - mid_lon
-        )
-        bounds = (mid_lat - square_size, mid_lon - square_size, mid_lat + square_size, mid_lon + square_size)
-
-        # 四分木を初期化
-        quadtree = Quadtree(bounds)
-
-        """
-        # データを四分木に挿入
-        for row in data:
-            lat, lon, depth = row
-            point = {'lat': lat, 'lon': lon, 'depth': depth}
-            quadtree.insert(point)
-        """
-
-        # データを四分木に挿入
-        for _, row in df.iterrows():
-            point = {'lat': row['lat'], 'lon': row['lon'], 'depth': row['depth']}
-            quadtree.insert(point)
-
-        # 四分木の統計情報を表示する
+        # 四分木の統計情報を表示
         logger.info(f"Initial Quadtree stats\n{quadtree.get_stats_text()}\n")
 
-        #
-        # データ集約
-        #
-
-        # 最も深いノード、および一つ上の階層のノードについては、そのノード内のポイントの平均値に置き換える
-        deepest_level = quadtree.get_deepest_level()
-        nodes = [node for node in quadtree.get_leaf_nodes() if node.level >= (deepest_level - 1) and len(node.points) > 1]
-        for node in nodes:
-            avg_point = node.average()
-            node.points = [avg_point]
-
-        # 四分木の統計情報を表示する
-        logger.info(f"Aggregated Quadtree stats\n{quadtree.get_stats_text()}\n")
-
-        #
-        # データを増やす
-        # ポイントのない葉ノードについては、隣接ノードに値があればその平均値で埋める
-        #
-        extended_count = 0
-        empty_leaf_nodes = quadtree.get_empty_leaf_nodes()
-        for node in empty_leaf_nodes:
-
-            if node.level < deepest_level - 3:
-                # 深さが浅いノードは無視
-                continue
-
-            # 隣接ノードに格納されているポイントを収集
-            neighbor_points = []
-
-            # ノードの中心座標
-            mid_lat, mid_lon = node.center
-
-            # 8方向の隣接ノードをチェック
-            directions = [
-                (mid_lat - node.lat_length, mid_lon - node.lon_length),  # NW
-                (mid_lat - node.lat_length, mid_lon),                    # N
-                (mid_lat - node.lat_length, mid_lon + node.lon_length),  # NE
-                (mid_lat, mid_lon - node.lon_length),                    # W
-                (mid_lat, mid_lon + node.lon_length),                    # E
-                (mid_lat + node.lat_length, mid_lon - node.lon_length),  # SW
-                (mid_lat + node.lat_length, mid_lon),                    # S
-                (mid_lat + node.lat_length, mid_lon + node.lon_length)   # SE
-            ]
-
-            # 8方向の隣接ノードを取得
-            for d_lat, d_lon in directions:
-                neighbor_node = quadtree.get_leaf_node_by_point(d_lat, d_lon)
-                if neighbor_node and len(neighbor_node.points) > 0:
-                    neighbor_points.extend(neighbor_node.points)
-
-            # 平均値で埋める
-            if len(neighbor_points) > 3:
-                avg_lat = sum(p['lat'] for p in neighbor_points) / len(neighbor_points)
-                avg_lon = sum(p['lon'] for p in neighbor_points) / len(neighbor_points)
-                avg_depth = sum(p['depth'] for p in neighbor_points) / len(neighbor_points)
-                node.points.append({'lat': avg_lat, 'lon': avg_lon, 'depth': avg_depth})
-                extended_count += 1
-
-        logger.info(f"Extended {extended_count} empty leaf nodes with neighbor averages")
-
-        # 拡張した四分木の統計情報を表示する
-        logger.info(f"Extended Quadtree stats\n{quadtree.get_stats_text()}\n")
-
-        # 点群をファイルに保存する
-        points = []
-        for node in quadtree.get_leaf_nodes():
-            points.extend(node.points)
-        logger.info(f"Points count: {len(points)}")
-
-        # CSVファイルはJavaScriptのディレクトリに保存
-        output_path = app_home.joinpath("static/data/aggregated_data.csv")
-        with open(output_path, 'w') as f:
-            f.write("lat,lon,depth\n")
-            for p in points:
-                f.write(f"{p['lat']},{p['lon']},{p['depth']}\n")
-        logger.info(f"Points data saved to: {output_path}")
-
-        # 四分木の可視化画像を保存する
-        output_image_filename = f"{data_path.stem}_qtree.png"
-        output_image_path = image_dir.joinpath(output_image_filename)
-        #save_quadtree_image(quadtree=quadtree, filename=output_image_path, draw_points=False)
+        # クリギング補間
+        interpolated_df = kriging_interpolate_leaf_nodes(quadtree, df, grid_size_m=10.0)
+        output_path = app_home.joinpath("static", "data", "processed_data.csv")
+        save_csv(interpolated_df, output_path)
+        logger.info(f"補間結果を保存しました: {output_path}")
 
     #
     # 実行
     #
-
     main()
