@@ -8,7 +8,7 @@
 
 ## CSV data
 
-**2025 Oct** depth_map_data.csv
+**2025 Oct depth_map_data.csv**
 
 <br>
 
@@ -16,6 +16,7 @@ before processing csv data [ALL_depth_map_data_202510.csv](/data/ALL_depth_map_d
 
 after processing csv data [ALL_depth_map_data_202510_dd_ol_ip_mf.csv](/data/ALL_depth_map_data_202510_dd_ol_ip_mf.csv)
 
+<br>
 
 |       |            lat |             lon |        depth |
 |:------|---------------:|----------------:|-------------:|
@@ -34,6 +35,6 @@ after processing csv data [ALL_depth_map_data_202510_dd_ol_ip_mf.csv](/data/ALL_
 
 live demo
 
-[![ScreenImage](/assets/3d-visualization.png)](https://takamitsu-iida.github.io/aburatsubo-terrain-data/index-processed-data.html)
-
 https://takamitsu-iida.github.io/aburatsubo-terrain-data/index-processed-data.html
+
+[![ScreenImage](/assets/3d-visualization.png)](https://takamitsu-iida.github.io/aburatsubo-terrain-data/index-processed-data.html)
