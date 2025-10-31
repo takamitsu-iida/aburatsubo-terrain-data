@@ -25,10 +25,14 @@ warnings.filterwarnings(action="ignore", category=UserWarning, module=r"numpy.*"
 # 外部ライブラリのインポート
 #
 try:
+    # データフレーム操作
     import pandas as pd
+
+    # データを整形して表示
     from tabulate import tabulate
+
 except ImportError as e:
-    logging.error("pandas module is not installed. Please install pandas to use this script.")
+    logging.error(f"必要なライブラリがインストールされていません: {e}")
     sys.exit(1)
 
 # このファイルへのPathオブジェクト

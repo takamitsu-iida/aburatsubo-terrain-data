@@ -23,6 +23,7 @@ warnings.filterwarnings(action="ignore", category=UserWarning, module=r"numpy.*"
 #
 try:
     import pandas as pd
+    import numpy as np
     import matplotlib.pyplot as plt
 
     # GPS座標から距離を計算
@@ -30,8 +31,25 @@ try:
 
     # データを整形して表示
     from tabulate import tabulate
+
+    # 空間補間・近傍探索
+    from scipy.interpolate import griddata
+    from scipy.spatial import cKDTree
+
+    # クリギング補間
+    from pykrige.ok import OrdinaryKriging
+
 except ImportError as e:
     print(f"必要なライブラリがインストールされていません: {e}")
+    sys.exit(1)
+
+#
+# ローカルファイルからインポート
+#
+try:
+    from load_save_csv import load_csv, save_csv
+except ImportError as e:
+    print(f"ローカルモジュールのインポートに失敗しました: {e}")
     sys.exit(1)
 
 
@@ -539,24 +557,111 @@ def create_quadtree_from_df(df: pd.DataFrame) -> Quadtree:
 
 if __name__ == '__main__':
 
-    # ローカルファイルからインポート
-    from load_save_csv import load_csv
 
 
-    def misc():
-        from geopy.distance import great_circle, distance
+    def kriging_interpolate_leaf_nodes(quadtree, df, grid_size_m=10.0, points_per_tile=10):
+        """
+        四分木の葉ノードごとに、さらに小さなグリッドに分割してクリギング補間する
+        """
 
-        # 座標を (緯度, 経度) のタプルで定義
-        tokyo = (35.681236, 139.767125)
-        osaka = (34.702485, 135.495574)
+        # 経度1度をメートル座標に変換
+        METERS_PER_DEG_LAT = 111000.0
 
-        # great_circle (ハバーサインよりも高精度な測地線距離に近い計算) を使用して距離を計算
-        d = great_circle(tokyo, osaka)
+        # 緯度1度をメートル座標に変換
+        mean_lat = df['lat'].mean()
+        METERS_PER_DEG_LON = 111320.0 * np.cos(np.deg2rad(mean_lat))
 
-        print(f"geopyによる距離: {d.km:.2f} km")
+        # 経度1度をメートル座標に変換
+        METERS_PER_DEG_LAT = 111000.0
 
-        delta_lat, delta_lon = get_latlon_delta(tokyo[0], tokyo[1], meters=5)
-        print(f"5m四方の緯度差: {delta_lat:.8f}, 経度差: {delta_lon:.8f}")
+        # 緯度1度をメートル座標に変換
+        # 緯度によって変わるので、df['lat']の平均値を使って経度1度あたりの距離を計算する
+        mean_lat = df['lat'].mean()
+        METERS_PER_DEG_LON = 111320.0 * np.cos(np.deg2rad(mean_lat))
+
+        # 座標をメートル単位に変換
+        x = df['lon'].values * METERS_PER_DEG_LON
+        y = df['lat'].values * METERS_PER_DEG_LAT
+        coords = np.column_stack([x, y])
+
+        kdtree = cKDTree(coords)
+
+        # 結果格納用のリスト
+        interpolated_results = []
+
+        # 葉ノードを取得
+        leaf_nodes = quadtree.get_leaf_nodes()
+
+        for node in leaf_nodes:
+            if len(node.points) < 4:
+                continue
+
+            # ノードの範囲
+            lat1, lon1, lat2, lon2 = node.bounds
+
+            # ノード内のデータ抽出
+            mask = (
+                (df['lat'] >= lat1) & (df['lat'] < lat2) &
+                (df['lon'] >= lon1) & (df['lon'] < lon2)
+            )
+            tile_df = df[mask]
+
+            # KDTreeで半径10m以内の点を抽出して追加する
+            """
+            node_center_lat = (lat1 + lat2) / 2.0
+            node_center_lon = (lon1 + lon2) / 2.0
+            node_center_x = node_center_lon * METERS_PER_DEG_LON
+            node_center_y = node_center_lat * METERS_PER_DEG_LAT
+            indices = kdtree.query_ball_point([node_center_x, node_center_y], r=10.0)
+            additional_points = df.iloc[indices]
+            tile_df = pd.concat([tile_df, additional_points]).drop_duplicates().reset_index(drop=True)
+            """
+
+            if len(tile_df) < 4:
+                continue
+
+            # メートル座標に変換
+            tile_x = tile_df['lon'].values * METERS_PER_DEG_LON
+            tile_y = tile_df['lat'].values * METERS_PER_DEG_LAT
+            tile_depths = tile_df['depth'].values
+
+            # グリッド分割数を計算（ノードのサイズをメートルに変換して分割数を決定）
+            width_m = distance((lat1, lon1), (lat1, lon2)).meters
+            height_m = distance((lat1, lon1), (lat2, lon1)).meters
+            n_x = max(2, int(width_m // grid_size_m))
+            n_y = max(2, int(height_m // grid_size_m))
+
+            grid_lon = np.linspace(lon1, lon2, n_x)
+            grid_lat = np.linspace(lat1, lat2, n_y)
+            grid_x = grid_lon * METERS_PER_DEG_LON
+            grid_y = grid_lat * METERS_PER_DEG_LAT
+
+            # クリギング補間
+            try:
+                OK = OrdinaryKriging(
+                    tile_x, tile_y, tile_depths,
+                    variogram_model='linear',
+                    verbose=False,
+                    enable_plotting=False
+                )
+                z, ss = OK.execute('grid', grid_x, grid_y)
+                grid_xx, grid_yy = np.meshgrid(grid_x, grid_y)
+                for xi, yi, zi in zip(grid_xx.flatten(), grid_yy.flatten(), z.flatten()):
+                    interpolated_results.append({
+                        'lon': xi / METERS_PER_DEG_LON,
+                        'lat': yi / METERS_PER_DEG_LAT,
+                        'depth': zi
+                    })
+            except Exception as e:
+                logger.warning(f"Kriging failed for node at bounds {node.bounds}: {e}")
+                continue
+
+        # 元のデータフレームと補間結果を結合
+        interpolated_df = pd.DataFrame(interpolated_results)
+        combined_df = pd.concat([df, interpolated_df], ignore_index=True)
+        return combined_df
+
+
 
 
     def main():
@@ -574,16 +679,17 @@ if __name__ == '__main__':
             return
 
         # 四分木を作成
-        Quadtree.MIN_GRID_WIDTH = 10.0  # 最小ノードの幅が10メートル以下になるように設定
+        Quadtree.MIN_GRID_WIDTH = 20.0  # 最小ノードの幅が20メートル以下になるように設定
         quadtree = create_quadtree_from_df(df)
 
         # 四分木の統計情報を表示
         logger.info(f"Initial Quadtree stats\n{quadtree.get_stats_text()}\n")
 
-        # イメージ保存
-        image_path = image_dir.joinpath("quadtree_initial.png")
-        save_quadtree_image(quadtree, str(image_path), draw_points=True)
-        logger.info(f"Quadtree image saved to {image_path}")
+        # クリギング補間
+        interpolated_df = kriging_interpolate_leaf_nodes(quadtree, df, grid_size_m=10.0)
+        output_path = app_home.joinpath("static", "data", "processed_data.csv")
+        save_csv(interpolated_df, output_path)
+        logger.info(f"補間結果を保存しました: {output_path}")
 
     #
     # 実行
