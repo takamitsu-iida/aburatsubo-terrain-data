@@ -297,9 +297,8 @@ if __name__ == '__main__':
         visualize_all_kriged_df(kriged_dfs, image_dir, filename="kriging_interpolated_depth_all.png")
 
         # CSVファイルとして保存
-        output_csv_path = data_dir.joinpath("kriging_interpolated_depth_all.csv")
+        output_csv_path = app_home.joinpath("static").joinpath("data").joinpath("kriging_data.csv")
         save_kriged_df_to_csv(kriged_dfs, output_csv_path)
-
 
     #
     # 実行
