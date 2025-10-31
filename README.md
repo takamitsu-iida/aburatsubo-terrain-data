@@ -27,11 +27,13 @@ before processing csv data [ALL_depth_map_data_202510.csv](/data/ALL_depth_map_d
 
 after processing csv data [ALL_depth_map_data_202510_dd_ol_ip_mf.csv](/data/ALL_depth_map_data_202510_dd_ol_ip_mf.csv)
 
-<br>
+[![ScreenImage](/assets/3d-visualization.png)](https://takamitsu-iida.github.io/aburatsubo-terrain-data/index-processed-data.html)
 
-3D Visualization [live demo](https://takamitsu-iida.github.io/aburatsubo-terrain-data/index-processed-data.html)
+https://takamitsu-iida.github.io/aburatsubo-terrain-data/index-processed-data.html
+
 
 <br>
 
 ![deduplicated](/assets/ALL_depth_map_data_dd.png)
+
 ![outlier removed](/assets/ALL_depth_map_data_dd_ol.png)
