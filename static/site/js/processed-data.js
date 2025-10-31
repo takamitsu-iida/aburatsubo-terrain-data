@@ -333,6 +333,11 @@ export class Main {
         for (let j = 0; j < headers.length; j++) {
           d[headers[j].trim()] = parseFloat(rows[j].trim());
         }
+
+        // 4列ある場合は、クラスタ番号が入っている
+        if (rows.length === 4) {
+          d['cluster'] = parseInt(rows[3].trim());
+        }
         dataList.push(d);
 
         // 緯度経度の最大値、最小値を調べる
