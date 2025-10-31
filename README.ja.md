@@ -16,7 +16,7 @@ https://takamitsu-iida.github.io/aburatsubo-terrain-data/data/ALL_depth_map_data
 
 3D可視化のライブデモ
 
-[![ScreenImage](./asset/3d-visualization.png)](https://takamitsu-iida.github.io/aburatsubo-terrain-data/index-processed-data.html)
+[![ScreenImage](/assets/3d-visualization.png)](https://takamitsu-iida.github.io/aburatsubo-terrain-data/index-processed-data.html)
 
 https://takamitsu-iida.github.io/aburatsubo-terrain-data/index-processed-data.html
 

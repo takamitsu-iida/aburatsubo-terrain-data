@@ -2,6 +2,10 @@
 
 <br>
 
+[README in Japanese](/README.ja.md)
+
+<br>
+
 **2025 Oct** depth_map_data.csv
 
 <br>
