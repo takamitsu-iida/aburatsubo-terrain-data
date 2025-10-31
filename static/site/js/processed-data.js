@@ -313,7 +313,7 @@ export class Main {
     const isHeader = isNaN(Number(firstLine.split(',')[0]));
     const headers = isHeader ? lines[0].split(',').map(h => h.trim()) : ["lat", "lon", "depth"];
 
-    // データ開始行のインデックス
+        // データ開始行のインデックス
     const startIdx = isHeader ? 1 : 0;
 
     // 行ごとにパースしたデータを格納する配列
