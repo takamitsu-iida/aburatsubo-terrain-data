@@ -126,7 +126,15 @@ def read_csv(file_path: Path) -> Tuple[List[List[float]], Dict[str, Dict[str, fl
 
 
 def load_csv(input_data_path: Path) -> pd.DataFrame | None:
-    # 入力CSVファイルをPandasのデータフレームとして読み込む
+    """
+    CSVファイルを読み込み、DataFrameとして返す。
+
+    Args:
+        input_data_path: Path to the input CSV file.
+
+    Returns:
+        pd.DataFrame | None: 読み込んだデータフレーム、もしくは読み込みに失敗した場合はNoneを返す
+    """
     try:
         # CSVファイルに列名はない前提なのでheader=Noneを指定して読み込む
         df = pd.read_csv(input_data_path, header=None)

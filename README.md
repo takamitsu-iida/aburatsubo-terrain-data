@@ -19,8 +19,9 @@
 
 <br>
 
-before processing [ALL_depth_map_data_202510.csv](/data/ALL_depth_map_data_202510.csv)
-after processing [ALL_depth_map_data_202510_dd_ol_ip_mf.csv](/data/ALL_depth_map_data_202510_dd_ol_ip_mf.csv)
+before processing csv data [ALL_depth_map_data_202510.csv](/data/ALL_depth_map_data_202510.csv)
+
+after processing csv data [ALL_depth_map_data_202510_dd_ol_ip_mf.csv](/data/ALL_depth_map_data_202510_dd_ol_ip_mf.csv)
 
 <br>
 
@@ -29,5 +30,4 @@ after processing [ALL_depth_map_data_202510_dd_ol_ip_mf.csv](/data/ALL_depth_map
 <br>
 
 ![deduplicated](/assets/ALL_depth_map_data_dd.png)
-
 ![outlier removed](/assets/ALL_depth_map_data_dd_ol.png)
