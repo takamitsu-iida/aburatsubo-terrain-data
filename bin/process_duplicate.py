@@ -108,14 +108,19 @@ logger.addHandler(file_handler)
 
 def process_duplicates(df: pd.DataFrame) -> pd.DataFrame:
     """
-    (lat, lon)が重複した行については、depthの平均値を取り、(lat, lon, depth)で1行だけ残す。
+    座標(lat, lon)が同じ行については、depthの平均値を取り、(lat, lon, depth)で1行だけ残す。
     """
-    before = len(df)
-    # groupbyで(lat, lon)ごとにdepthの平均を計算
-    df_uniq = df.groupby(['lat', 'lon'], as_index=False)['depth'].mean()
-    after = len(df_uniq)
-    removed = before - after
-    logger.info(f"重複排除前: {before}件, 排除後: {after}件, 排除数: {removed}件")
+    before_len = len(df)
+
+    # groupbyで(lat, lon)ごとにdepthの平均、epochの最大値を計算
+    if 'epoch' in df.columns:
+        df_uniq = df.groupby(['lat', 'lon'], as_index=False).agg({'depth': 'mean', 'epoch': 'max'})
+    else:
+        df_uniq = df.groupby(['lat', 'lon'], as_index=False)['depth'].mean()
+
+    after_len = len(df_uniq)
+    logger.info(f"重複排除前: {before_len}件, 排除後: {after_len}件, 重複数: {before_len - after_len}件")
+
     return df_uniq
 
 

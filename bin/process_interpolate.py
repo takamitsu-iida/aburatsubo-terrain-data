@@ -254,6 +254,10 @@ def init_quadtree(df: pd.DataFrame) -> Quadtree:
     # 四分木にデータを挿入
     for _, row in df.iterrows():
         point = {'lat': row['lat'], 'lon': row['lon'], 'depth': row['depth']}
+        if 'epoch' in df.columns:
+            point['epoch'] = row['epoch']
+        if 'cluster' in df.columns:
+            point['cluster'] = row['cluster']
         quadtree.insert(point)
 
     return quadtree

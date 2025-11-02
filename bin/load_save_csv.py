@@ -75,7 +75,7 @@ def line_callback(line: str) -> None:
 
 def read_csv(file_path: Path) -> Tuple[List[List[float]], Dict[str, Dict[str, float]]]:
     """
-    CSVファイルを読み込み、データのリストと各カラム（lat, lon, depth）の最大・最小値を返す。
+    CSVファイルを読み込み、データのリストおよびlat, lon, depthの最大・最小値を返す。
 
     Returns:
         data: List[List[float]]
@@ -94,33 +94,45 @@ def read_csv(file_path: Path) -> Tuple[List[List[float]], Dict[str, Dict[str, fl
     max_lon = float('-inf')
     min_depth = float('inf')
     max_depth = float('-inf')
+    min_epoch = float('inf')
+    max_epoch = float('-inf')
 
     with file_path.open() as f:
         for line in f:
+            line = line.strip()
+            if not line or line.startswith('#'):
+                continue
+            split_values = line.split(',')
+            if len(split_values) < 4:
+                continue
             try:
-                lat, lon, depth = [float(x) for x in line.strip().split(',')[:3]]
+                lat, lon, depth, epoch = [float(x) for x in split_values[:4]]
             except ValueError:
                 continue
-            data.append([lat, lon, depth])
+            data.append([lat, lon, depth, epoch])
             min_lat = min(min_lat, lat)
             max_lat = max(max_lat, lat)
             min_lon = min(min_lon, lon)
             max_lon = max(max_lon, lon)
             min_depth = min(min_depth, depth)
             max_depth = max(max_depth, depth)
+            min_epoch = min(min_epoch, epoch)
+            max_epoch = max(max_epoch, epoch)
 
     stats = {
         'lat': {'min': min_lat, 'max': max_lat},
         'lon': {'min': min_lon, 'max': max_lon},
-        'depth': {'min': min_depth, 'max': max_depth}
+        'depth': {'min': min_depth, 'max': max_depth},
+        'epoc': {'min': min_epoch, 'max': max_epoch}
     }
 
-    table = [
+    tabulate_headers = ["", "lat", "lon", "depth"]
+    tabulate_table = [
         ["min", stats['lat']['min'], stats['lon']['min'], stats['depth']['min']],
         ["max", stats['lat']['max'], stats['lon']['max'], stats['depth']['max']],
     ]
-    headers = ["", "lat", "lon", "depth"]
-    logging.info(f"read_csv() {file_path}\n{tabulate(table, headers=headers, floatfmt='.6f')}\n")
+
+    logging.info(f"read_csv() {file_path}\n{tabulate(tabulate_table, headers=tabulate_headers, floatfmt='.6f')}\n")
 
     return data, stats
 
@@ -136,15 +148,16 @@ def load_csv(input_data_path: Path) -> pd.DataFrame | None:
         pd.DataFrame | None: 読み込んだデータフレーム、もしくは読み込みに失敗した場合はNoneを返す
     """
     try:
-        # CSVファイルに列名はない前提なのでheader=Noneを指定して読み込む
+        # CSVファイルに列名の行は存在しない前提なのでheader=Noneを指定して読み込む
         df = pd.read_csv(input_data_path, header=None)
 
         # データフレームに列名を定義
         if df.shape[1] == 3:
             df.columns = ["lat", "lon", "depth"]
         elif df.shape[1] == 4:
-            df.columns = ["lat", "lon", "depth", "time"]
-            del df["time"]
+            df.columns = ["lat", "lon", "depth", "epoch"]
+        elif df.shape[1] == 5:
+            df.columns = ["lat", "lon", "depth", "epoch", "cluster"]
         else:
             return None
     except Exception as e:
@@ -171,7 +184,12 @@ def save_points_as_csv(points: List[Dict[str, float]], output_file_path: Path) -
     try:
         with output_file_path.open('w') as f:
             for p in points:
-                line = f"{p['lat']},{p['lon']},{p['depth']}\n"
+                line = f"{p['lat']},{p['lon']},{p['depth']}"
+                if 'epoch' in p:
+                    line += f",{p['epoch']}"
+                if 'cluster' in p:
+                    line += f",{p['cluster']}"
+                line += "\n"
                 f.write(line)
     except Exception as e:
         logging.error(f"CSVファイルの保存に失敗しました：{str(e)}")
