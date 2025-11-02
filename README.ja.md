@@ -209,13 +209,23 @@ latとlon、どっちが緯度でどっちが経度かすぐにわからなく�
 
 <br><br>
 
-# 参考文献（データ処理）
+## 参考文献
+
+<br>
 
 [Python で曲面近似（サーフェスフィッティング）する](https://chuckischarles.hatenablog.com/entry/2020/02/06/081238)
 
+<br>
+
 [カーブフィッティング手法 scipy.optimize.curve_fit の使い方を理解する](https://qiita.com/maskot1977/items/e4f5f71200180865986e)
 
+<br>
+
 [The Nature of Geographic Information](https://www.e-education.psu.edu/natureofgeoinfo/c7_p9.html)
+
+<br>
+
+[Design a Geo-Spatial index for real-time location search](https://kousiknath.medium.com/system-design-design-a-geo-spatial-index-for-real-time-location-search-10968fe62b9c)
 
 <br><br>
 
