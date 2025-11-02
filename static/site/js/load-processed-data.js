@@ -1145,7 +1145,7 @@ export class Main {
 
       if (depth < 0) {
         this.depthContainer.textContent = `Depth: ${depth.toFixed(1)}m`;
-        this.coordinatesContainer.textContent = `${lon.toFixed(10)}, ${lat.toFixed(10)}`;
+        this.coordinatesContainer.textContent = `${lat.toFixed(8)}, ${lon.toFixed(8)}`;
 
         // 凡例をハイライト
         this.updateLegendHighlight(depth);
