@@ -38,3 +38,12 @@ live demo
 https://takamitsu-iida.github.io/aburatsubo-terrain-data/index-processed-data.html
 
 [![ScreenImage](/assets/3d-visualization.png)](https://takamitsu-iida.github.io/aburatsubo-terrain-data/index-processed-data.html)
+
+
+<br><br>
+
+## 2D Visualization (by Deeper)
+
+<br>
+
+![2d map](/assets/2d-map-by-deeper.png)
