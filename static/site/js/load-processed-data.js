@@ -818,9 +818,11 @@ export class Main {
     pointMeshList.push(pointMesh);
 
     // デローネ三角形のインデックスを作成
+    // x = lon, y = depth, z = lat
     const delaunay = Delaunator.from(
       positions.map(v => [v.x, v.z])
     );
+
     const meshIndex = [];
     for (let i = 0; i < delaunay.triangles.length; i += 3) {
       const a = delaunay.triangles[i + 0];
