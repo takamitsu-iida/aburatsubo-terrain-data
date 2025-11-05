@@ -183,6 +183,13 @@ export class Main {
 
     // コンパスを表示する？
     showCompass: true,
+
+
+    // デローネ三角形のフィルタリングパラメータ
+    maxEdgeLength: 10,           // エッジの最大長さ
+    maxTriangleArea: 100,        // 三角形の最大面積
+    enableTriangleFilter: true,  // フィルタリングを有効にするか
+
   }
 
   // 地形図のポイントクラウド（guiで表示を操作するためにインスタンス変数にする）
@@ -669,6 +676,40 @@ export class Main {
       .add(displayParams, 'scale')
       .name(navigator.language.startsWith("ja") ? "縮尺表示" : "show scale");
 
+
+    const triangleFolder = gui.addFolder(navigator.language.startsWith("ja") ? "三角形フィルタ" : "Triangle Filter");
+
+    triangleFolder
+      .add(this.params, "enableTriangleFilter")
+      .name(navigator.language.startsWith("ja") ? "フィルタ有効" : "Enable Filter")
+      .onChange(() => {
+        this.initContents(); // メッシュを再構築
+      });
+
+    triangleFolder
+      .add(this.params, "maxEdgeLength")
+      .name(navigator.language.startsWith("ja") ? "最大辺長" : "Max Edge Length")
+      .min(5)
+      .max(50)
+      .step(1)
+      .onChange(() => {
+        this.initContents(); // メッシュを再構築
+      });
+
+    triangleFolder
+      .add(this.params, "maxTriangleArea")
+      .name(navigator.language.startsWith("ja") ? "最大面積" : "Max Area")
+      .min(10)
+      .max(500)
+      .step(10)
+      .onChange(() => {
+        this.initContents(); // メッシュを再構築
+      });
+
+
+
+
+
     // 画面が小さい場合は初期状態で閉じた状態にする
     if (window.matchMedia('(max-width: 640px)').matches) {
       gui.close();
@@ -781,9 +822,53 @@ export class Main {
       if (!clusters[clusterId]) clusters[clusterId] = [];
       clusters[clusterId].push(point);
     });
+
     // クラスタごとの配列リストを返す
     return Object.values(clusters);
   }
+
+
+  // 三角形が有効かどうかを判定する関数
+  isValidTriangle = (posA, posB, posC) => {
+    if (!this.params.enableTriangleFilter) {
+      return true;
+    }
+
+    // 各辺の長さを計算
+    const edgeAB = Math.sqrt(
+      Math.pow(posA.x - posB.x, 2) + Math.pow(posA.z - posB.z, 2)
+    );
+    const edgeBC = Math.sqrt(
+      Math.pow(posB.x - posC.x, 2) + Math.pow(posB.z - posC.z, 2)
+    );
+    const edgeCA = Math.sqrt(
+      Math.pow(posC.x - posA.x, 2) + Math.pow(posC.z - posA.z, 2)
+    );
+
+    // エッジ長さのチェック
+    if (edgeAB > this.params.maxEdgeLength ||
+        edgeBC > this.params.maxEdgeLength ||
+        edgeCA > this.params.maxEdgeLength) {
+      return false;
+    }
+
+    // 面積のチェック
+    const area = this.calculateTriangleArea(posA, posB, posC);
+    if (area > this.params.maxTriangleArea) {
+      return false;
+    }
+
+    return true;
+  }
+
+  // 三角形の面積を計算する関数
+  calculateTriangleArea = (posA, posB, posC) => {
+    const crossProduct =
+      (posB.x - posA.x) * (posC.z - posA.z) -
+      (posC.x - posA.x) * (posB.z - posA.z);
+    return Math.abs(crossProduct) / 2;
+  }
+
 
 
   // CSVデータを使ってデローネ三角形でメッシュ化する
@@ -835,11 +920,23 @@ export class Main {
       );
 
       const meshIndex = [];
+
       for (let i = 0; i < delaunay.triangles.length; i += 3) {
         const a = delaunay.triangles[i + 0];
         const b = delaunay.triangles[i + 1];
         const c = delaunay.triangles[i + 2];
-        meshIndex.push(a, b, c);
+
+        // ADDED
+        // 三角形の各頂点を取得
+        const posA = positions[a];
+        const posB = positions[b];
+        const posC = positions[c];
+        // 三角形が有効かどうかを判定
+        if (this.isValidTriangle(posA, posB, posC)) {
+          meshIndex.push(a, b, c);
+        }
+
+        // meshIndex.push(a, b, c);
       }
       geometry.setIndex(meshIndex);
       geometry.computeVertexNormals();

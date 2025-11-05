@@ -5,12 +5,12 @@
 #
 # 標準ライブラリのインポート
 #
+import json
 import logging
 import math
 import os
 import sys
 
-from collections import deque
 from pathlib import Path
 from typing import List, Tuple, Optional, Dict, Any
 
@@ -31,6 +31,7 @@ try:
 
     # データを整形して表示
     from tabulate import tabulate
+
 except ImportError as e:
     print(f"必要なライブラリがインストールされていません: {e}")
     sys.exit(1)
@@ -437,6 +438,27 @@ class Quadtree:
         return tabulate(table, headers=headers, numalign='right', tablefmt='github')
 
 
+
+    def save_to_csv(self, filepath: Path) -> None:
+        """ 四分木のリーフノードが持つポイントデータをCSVファイルに保存する """
+        import csv
+
+        leaf_nodes = self.get_leaf_nodes()
+
+        with open(filepath, mode='w', newline='', encoding='utf-8') as csvfile:
+            fieldnames = ['lat', 'lon', 'depth']
+            writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+
+            writer.writeheader()
+            for node in leaf_nodes:
+                for point in node.points:
+                    writer.writerow({
+                        'lat': point['lat'],
+                        'lon': point['lon'],
+                        'depth': point['depth']
+                    })
+        logger.info(f"Quadtree data saved to CSV: {filepath}")
+
 def get_latlon_delta(lat: float, lon: float, meters: float = 1.0) -> tuple[float, float]:
     """
     指定した緯度経度における、指定距離（メートル）のグリッドの緯度・経度の差分を返す。
@@ -576,6 +598,9 @@ if __name__ == '__main__':
     # ローカルファイルからインポート
     from load_save_csv import load_csv
 
+    # KDTreeを使って高速に近傍点を探索する
+    from scipy.spatial import cKDTree
+
     def misc():
         from geopy.distance import great_circle
 
@@ -590,6 +615,56 @@ if __name__ == '__main__':
 
         delta_lat, delta_lon = get_latlon_delta(tokyo[0], tokyo[1], meters=5)
         print(f"5m四方の緯度差: {delta_lat:.8f}, 経度差: {delta_lon:.8f}")
+
+
+
+
+
+    def interpolate_grid(node, grid_size=10):
+        """
+        四分木ノードの領域をgrid_size（点間距離）でグリッド化し、IDWでdepth補間
+        """
+
+        import numpy as np
+        from scipy.spatial import Delaunay
+
+        lat1, lon1, lat2, lon2 = node.bounds
+        points = node.get_points()
+        if len(points) < 3:
+            return None  # メッシュ化不可
+
+        # グリッド生成
+        n_lat = max(2, int(distance((lat1, lon1), (lat2, lon1)).meters // grid_size))
+        n_lon = max(2, int(distance((lat1, lon1), (lat1, lon2)).meters // grid_size))
+        grid_lats = np.linspace(lat1, lat2, n_lat)
+        grid_lons = np.linspace(lon1, lon2, n_lon)
+        grid_points = np.array([(lat, lon) for lat in grid_lats for lon in grid_lons])
+
+        # IDW補間
+        def idw(lat, lon, points, power=2):
+            dists = np.array([np.hypot(lat - p['lat'], lon - p['lon']) for p in points])
+            if np.any(dists == 0):
+                return [p['depth'] for i, p in enumerate(points) if dists[i] == 0][0]
+            weights = 1 / (dists ** power)
+            depths = np.array([p['depth'] for p in points])
+            return np.sum(weights * depths) / np.sum(weights)
+
+        grid_depths = np.array([idw(lat, lon, points) for lat, lon in grid_points])
+
+        # メッシュ化（Delaunay三角形分割）
+        tri = Delaunay(grid_points)
+
+        mesh_df = pd.DataFrame({
+            'lat': grid_points[:, 0],
+            'lon': grid_points[:, 1],
+            'depth': grid_depths
+        })
+        triangles = tri.simplices.tolist()
+
+        return mesh_df, triangles
+
+
+
 
 
     def main():
@@ -607,50 +682,16 @@ if __name__ == '__main__':
             return
 
         # 四分木を作成
-        # Quadtree.MIN_GRID_WIDTH = 10.0  # 最小ノードの幅が10メートル以下になるように設定
         quadtree = create_quadtree_from_df(df)
 
         # 四分木の統計情報を表示
         logger.info(f"Initial Quadtree stats\n{quadtree.get_stats_text()}\n")
 
-        # DISPLAY_LEVELにあるポイントをCSVに保存する
-        # その際に、ノード番号をクラスタ番号として付与する
-        display_nodes = quadtree.get_nodes_at_level(quadtree.DISPLAY_LEVEL)
-        display_points = []
-        cluster_id = 1
-        for node in display_nodes:
-            points = node.get_points()
-            if not points:
-                continue
-            for p in points:
-                display_points.append({**p, 'cluster': cluster_id})
+        # CSVとして保存する
+        output_filename = "quadtree_initial.csv"
+        output_filepath = app_home.joinpath("static", "data", output_filename)
+        quadtree.save_to_csv(output_filepath)
 
-            # ノードの4つの角についても追加で保存する（水深は平均値をとる）
-            lat1, lon1, lat2, lon2 = node.bounds
-            avg = node.average()
-            avg_depth = avg.get('depth', 0.0)
-            display_points.append({'lat': lat1, 'lon': lon1, 'depth': avg_depth, 'cluster': cluster_id})
-            display_points.append({'lat': lat1, 'lon': lon2, 'depth': avg_depth, 'cluster': cluster_id})
-            display_points.append({'lat': lat2, 'lon': lon1, 'depth': avg_depth, 'cluster': cluster_id})
-            display_points.append({'lat': lat2, 'lon': lon2, 'depth': avg_depth, 'cluster': cluster_id})
-
-            cluster_id += 1
-
-        display_df = pd.DataFrame(display_points)
-
-        # 四角は重複するのでgroupbyで(lat, lon)ごとにdepthの平均を計算
-        df_uniq = (
-            display_df
-            .sort_values(['lat', 'lon'])
-            .groupby(['lat', 'lon'], as_index=False)
-            .agg({'depth': 'mean', **{col: 'first' for col in display_df.columns if col not in ['lat', 'lon', 'depth']}})
-        )
-
-
-
-        output_display_csv = app_home.joinpath("static", "data", "quadtree_display_level_points.csv")
-        df_uniq.to_csv(output_display_csv, index=False)
-        logger.info(f"DISPLAY_LEVEL points saved to {output_display_csv}")
 
         # イメージ保存
         image_path = image_dir.joinpath("quadtree_initial.png")
