@@ -16,9 +16,9 @@ https://takamitsu-iida.github.io/aburatsubo-terrain-data/data/ALL_depth_map_data
 
 3D可視化のライブデモ
 
-[![ScreenImage](/assets/3d-visualization.png)](https://takamitsu-iida.github.io/aburatsubo-terrain-data/index-processed-data.html)
+[![ScreenImage](/assets/3d-visualization.png)](https://takamitsu-iida.github.io/aburatsubo-terrain-data/index-bathymetric-data.html)
 
-https://takamitsu-iida.github.io/aburatsubo-terrain-data/index-processed-data.html
+https://takamitsu-iida.github.io/aburatsubo-terrain-data/index-bathymetric-data.html
 
 
 <br>
@@ -226,6 +226,10 @@ latとlon、どっちが緯度でどっちが経度かすぐにわからなく�
 <br>
 
 [Design a Geo-Spatial index for real-time location search](https://kousiknath.medium.com/system-design-design-a-geo-spatial-index-for-real-time-location-search-10968fe62b9c)
+
+<br>
+
+[A dive into spatial search algorithms](https://blog.mapbox.com/a-dive-into-spatial-search-algorithms-ebd0c5e39d2a)
 
 <br><br>
 

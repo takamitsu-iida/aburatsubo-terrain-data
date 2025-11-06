@@ -115,8 +115,8 @@ export class Main {
     // xzGridSizeにあわせるために、どのくらい緯度経度の値を拡大するか（自動で計算する）
     xzScale: 10000,  // これは仮の値で、CSVデータを読み込んだ後に正規化する
 
-    // 水深データのCSVファイルのURL
-    depthMapPath: "./static/data/processed_data.csv",
+    // 水深データのCSVファイルのURL（html側で指定する）
+    depthMapPath: "",
 
     // CSVテキストをパースして作成するデータ配列
     // 画面表示に適した値に正規化するのでCSVの値とは異なることに注意
@@ -184,12 +184,9 @@ export class Main {
     // コンパスを表示する？
     showCompass: true,
 
-
     // デローネ三角形のフィルタリングパラメータ
-    maxEdgeLength: 10,           // エッジの最大長さ
-    maxTriangleArea: 100,        // 三角形の最大面積
-    enableTriangleFilter: true,  // フィルタリングを有効にするか
-
+    enableTriangleFilter: true,
+    maxTriangleEdgeLength: 15,  // エッジの最大長さ 画面サイズxzGridSizeが200の場合の適切な初期値
   }
 
   // 地形図のポイントクラウド（guiで表示を操作するためにインスタンス変数にする）
@@ -197,7 +194,6 @@ export class Main {
 
   // 地形図のメッシュのリスト（guiで表示を操作するためにインスタンス変数にする）
   terrainMeshList = [];
-
 
   constructor(params = {}) {
     this.params = Object.assign(this.params, params);
@@ -318,7 +314,7 @@ export class Main {
    // 先頭行が数字で始まる場合はヘッダ無しと判定
     const firstLine = lines[0].trim();
     const isHeader = isNaN(Number(firstLine.split(',')[0]));
-    const headers = isHeader ? lines[0].split(',').map(h => h.trim()) : ["lat", "lon", "depth", "cluster"];
+    const headers = isHeader ? lines[0].split(',').map(h => h.trim()) : ["lat", "lon", "depth", "epoch"];
 
     // データ開始行のインデックス
     const startIdx = isHeader ? 1 : 0;
@@ -339,6 +335,10 @@ export class Main {
         const d = {};
         for (let j = 0; j < headers.length; j++) {
           d[headers[j]] = parseFloat(rows[j].trim());
+        }
+        // 5列ある場合は、クラスタ番号が入っている
+        if (rows.length === 5) {
+          d['cluster'] = parseInt(rows[4].trim());
         }
         dataList.push(d);
 
@@ -676,7 +676,6 @@ export class Main {
       .add(displayParams, 'scale')
       .name(navigator.language.startsWith("ja") ? "縮尺表示" : "show scale");
 
-
     const triangleFolder = gui.addFolder(navigator.language.startsWith("ja") ? "三角形フィルタ" : "Triangle Filter");
 
     triangleFolder
@@ -687,7 +686,7 @@ export class Main {
       });
 
     triangleFolder
-      .add(this.params, "maxEdgeLength")
+      .add(this.params, "maxTriangleEdgeLength")
       .name(navigator.language.startsWith("ja") ? "最大辺長" : "Max Edge Length")
       .min(5)
       .max(50)
@@ -695,20 +694,6 @@ export class Main {
       .onChange(() => {
         this.initContents(); // メッシュを再構築
       });
-
-    triangleFolder
-      .add(this.params, "maxTriangleArea")
-      .name(navigator.language.startsWith("ja") ? "最大面積" : "Max Area")
-      .min(10)
-      .max(500)
-      .step(10)
-      .onChange(() => {
-        this.initContents(); // メッシュを再構築
-      });
-
-
-
-
 
     // 画面が小さい場合は初期状態で閉じた状態にする
     if (window.matchMedia('(max-width: 640px)').matches) {
@@ -846,29 +831,14 @@ export class Main {
     );
 
     // エッジ長さのチェック
-    if (edgeAB > this.params.maxEdgeLength ||
-        edgeBC > this.params.maxEdgeLength ||
-        edgeCA > this.params.maxEdgeLength) {
-      return false;
-    }
-
-    // 面積のチェック
-    const area = this.calculateTriangleArea(posA, posB, posC);
-    if (area > this.params.maxTriangleArea) {
+    if (edgeAB > this.params.maxTriangleEdgeLength ||
+        edgeBC > this.params.maxTriangleEdgeLength ||
+        edgeCA > this.params.maxTriangleEdgeLength) {
       return false;
     }
 
     return true;
   }
-
-  // 三角形の面積を計算する関数
-  calculateTriangleArea = (posA, posB, posC) => {
-    const crossProduct =
-      (posB.x - posA.x) * (posC.z - posA.z) -
-      (posC.x - posA.x) * (posB.z - posA.z);
-    return Math.abs(crossProduct) / 2;
-  }
-
 
 
   // CSVデータを使ってデローネ三角形でメッシュ化する
@@ -952,37 +922,6 @@ export class Main {
       this.scene.add(terrainMesh);
       terrainMeshList.push(terrainMesh);
     });
-
-
-    /*
-    const delaunay = Delaunator.from(
-      positions.map(v => [v.x, v.z])
-    );
-
-    const meshIndex = [];
-    for (let i = 0; i < delaunay.triangles.length; i += 3) {
-      const a = delaunay.triangles[i + 0];
-      const b = delaunay.triangles[i + 1];
-      const c = delaunay.triangles[i + 2];
-      meshIndex.push(a, b, c);
-    }
-    geometry.setIndex(meshIndex);
-
-    // 法線ベクトルを計算
-    geometry.computeVertexNormals();
-
-    // メッシュマテリアル
-    const material = new THREE.MeshLambertMaterial({
-      vertexColors: true,
-      wireframe: this.params.wireframe,
-    });
-
-    // メッシュを生成
-    const terrainMesh = new THREE.Mesh(geometry, material);
-    this.scene.add(terrainMesh);
-    terrainMeshList.push(terrainMesh);
-    */
-
 
     // 何個のポイントが表示されているかを表示
     document.getElementById('debugContainer').textContent = `${this.params.totalPointCount.toLocaleString()} points displayed`;

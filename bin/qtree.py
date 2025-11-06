@@ -5,7 +5,6 @@
 #
 # 標準ライブラリのインポート
 #
-import json
 import logging
 import math
 import os
@@ -271,6 +270,13 @@ class QuadtreeNode:
         avg_lon = sum(p['lon'] for p in points) / n
         avg_depth = sum(p['depth'] for p in points) / n
         return {'lat': avg_lat, 'lon': avg_lon, 'depth': avg_depth}
+
+
+    def replace_average(self) -> None:
+        """ ノード内のポイントを平均値で置き換える """
+        avg_point = self.average()
+        if avg_point:
+            self.points = [avg_point]
 
 
 class Quadtree:
@@ -570,6 +576,10 @@ def save_quadtree_image(
 def create_quadtree_from_df(df: pd.DataFrame) -> Quadtree:
     """ PandasのDataFrameから四分木を作成して返す """
 
+    # dfのカラムに 'lat', 'lon', 'depth' が含まれていることを想定
+    if not all(col in df.columns for col in ['lat', 'lon', 'depth']):
+        raise ValueError("DataFrame must contain 'lat', 'lon', and 'depth' columns")
+
     # データフレームから統計情報を取得
     min_lat, max_lat = df['lat'].min(), df['lat'].max()
     min_lon, max_lon = df['lon'].min(), df['lon'].max()
@@ -587,7 +597,9 @@ def create_quadtree_from_df(df: pd.DataFrame) -> Quadtree:
 
     # データを四分木に挿入
     for _, row in df.iterrows():
-        quadtree.insert({'lat': row['lat'], 'lon': row['lon'], 'depth': row['depth']})
+        # 行データを辞書に変換して挿入
+        point = row.to_dict()
+        quadtree.insert(point)
 
     return quadtree
 

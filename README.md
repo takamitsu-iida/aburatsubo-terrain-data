@@ -33,12 +33,11 @@ after processing csv data [ALL_depth_map_data_202510_dd_ol_ip_mf.csv](/data/ALL_
 
 ## 3D Visualization
 
-live demo
+Live Demo
 
-https://takamitsu-iida.github.io/aburatsubo-terrain-data/index-processed-data.html
+https://takamitsu-iida.github.io/aburatsubo-terrain-data/index-bathymetric-data.html
 
-[![ScreenImage](/assets/3d-visualization.png)](https://takamitsu-iida.github.io/aburatsubo-terrain-data/index-processed-data.html)
-
+[![ScreenImage](/assets/3d-visualization.png)](https://takamitsu-iida.github.io/aburatsubo-terrain-data/index-bathymetric-data.html)
 
 <br><br>
 

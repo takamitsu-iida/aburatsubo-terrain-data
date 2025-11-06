@@ -115,8 +115,8 @@ export class Main {
     // xzGridSizeにあわせるために、どのくらい緯度経度の値を拡大するか（自動で計算する）
     xzScale: 10000,  // これは仮の値で、CSVデータを読み込んだ後に正規化する
 
-    // 水深データのCSVファイルのURL
-    depthMapPath: "./static/data/processed_data.csv",
+    // 水深データのCSVファイルのURL(HTML側で適切に設定すること)
+    depthMapPath: "",
 
     // CSVテキストをパースして作成するデータ配列
     // 画面表示に適した値に正規化するのでCSVの値とは異なることに注意
