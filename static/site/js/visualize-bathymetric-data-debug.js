@@ -710,9 +710,11 @@ export class Main {
       .max(1.0)
       .step(0.1)
       .onChange((value) => {
-        this.pointMeshList.forEach((pointMesh) => {
-          pointMesh.material.size = value;
-        });
+        doLater(() => {
+          this.pointMeshList.forEach((pointMesh) => {
+            pointMesh.material.size = value;
+          });
+        }, 250);
       });
 
       const displayParams = {
@@ -741,22 +743,21 @@ export class Main {
       },
     };
 
-
     displayFolder
       .add(displayParams, "wireframe")
-      .name(navigator.language.startsWith("ja") ? "ワイヤーフレーム表示" : "wireframe");
+      .name(navigator.language.startsWith("ja") ? "ワイヤーフレーム表示" : "Wireframe");
 
     displayFolder
       .add(displayParams, "pointCloud")
-      .name(navigator.language.startsWith("ja") ? "ポイントクラウド表示" : "showPointCloud");
+      .name(navigator.language.startsWith("ja") ? "ポイントクラウド表示" : "Show point cloud");
 
     displayFolder
       .add(displayParams, 'landmark')
-      .name(navigator.language.startsWith("ja") ? "ランドマーク表示" : "show landmark");
+      .name(navigator.language.startsWith("ja") ? "ランドマーク表示" : "Show landmark");
 
     displayFolder
       .add(displayParams, 'scale')
-      .name(navigator.language.startsWith("ja") ? "縮尺表示" : "show scale");
+      .name(navigator.language.startsWith("ja") ? "縮尺表示" : "Show scale");
 
     // デローネ三角形フィルタフォルダ
     const triangleFolder = gui.addFolder(navigator.language.startsWith("ja") ? "三角形フィルタ" : "Triangle Filter");
@@ -775,7 +776,9 @@ export class Main {
       .max(50)
       .step(1)
       .onChange(() => {
-        this.initContents(); // メッシュを再構築
+        doLater(() => {
+          this.initContents(); // メッシュを再構築
+        }, 250);
       });
 
     // データセット選択フォルダ
