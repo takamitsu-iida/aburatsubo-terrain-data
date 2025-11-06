@@ -700,13 +700,13 @@ if __name__ == '__main__':
         logger.info(f"Initial Quadtree stats\n{quadtree.get_stats_text()}\n")
 
         # CSVとして保存する
-        output_filename = "quadtree_initial.csv"
+        output_filename = "quadtree_data.csv"
         output_filepath = app_home.joinpath("static", "data", output_filename)
         quadtree.save_to_csv(output_filepath)
 
 
         # イメージ保存
-        image_path = image_dir.joinpath("quadtree_initial.png")
+        image_path = image_dir.joinpath("quadtree_data.png")
         save_quadtree_image(quadtree, str(image_path), draw_points=True)
         logger.info(f"Quadtree image saved to {image_path}")
 

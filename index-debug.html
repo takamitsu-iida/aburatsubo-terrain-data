@@ -306,7 +306,8 @@
 
 <script type="module">
   import WebGL from './static/libs/capabilities/WebGL.js';
-  import { Main } from "./static/site/js/visualize-bathymetric-data.js";
+  // import { Main } from "./static/site/js/visualize-bathymetric-data.js";
+  import { Main } from "./static/site/js/visualize-bathymetric-data-debug.js";
 
   window.addEventListener("load", () => {
     if (WebGL.isWebGL2Available()) {
@@ -320,8 +321,9 @@
 
       const params = {
         // 水深データのCSVファイルのURL
-        depthMapPath: "./static/data/quadtree_initial.csv",
+        depthMapPath: "./static/data/quadtree_data.csv",
         // depthMapPath: "./static/data/kriging_data.csv",
+        // depthMapPath: "./static/data/bathymetric_data.csv",
         landmarks: landmarks,  // default []
         guiClosed: false,  // GUIをクローズド状態で開始する
         wireframe: false,
