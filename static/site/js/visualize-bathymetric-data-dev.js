@@ -108,12 +108,8 @@ export class Main {
 
   params = {
 
-
-
-    // 利用可能なCSVファイルのリスト
+    // 利用可能なCSVファイルのリスト（HTMLで指定したもので上書きされる）
     availableDatasets: {
-      'quadtree_data': './static/data/quadtree_data.csv',
-      'kriging_data': './static/data/kriging_data.csv',
       'bathymetric_data': './static/data/bathymetric_data.csv',
     },
 
@@ -129,9 +125,6 @@ export class Main {
 
     // xzGridSizeにあわせるために、どのくらい緯度経度の値を拡大するか（自動で計算する）
     xzScale: 10000,  // これは仮の値で、CSVデータを読み込んだ後に正規化する
-
-    // 水深データのCSVファイルのURL（html側で指定する）
-    depthMapPath: "",
 
     // CSVテキストをパースして作成するデータ配列
     // 画面表示に適した値に正規化するのでCSVの値とは異なることに注意
@@ -198,6 +191,9 @@ export class Main {
 
     // コンパスを表示する？
     showCompass: true,
+
+    // stats.jsを表示する？
+    showStats: true,
 
     // デローネ三角形のフィルタリングパラメータ
     enableTriangleFilter: true,
@@ -287,9 +283,12 @@ export class Main {
 
   init = async () => {
 
+    // 取得するデータのパスを取得
+    const dataPath = this.params.availableDatasets[this.params.currentDataset];
+
     // データを読み込む
     await Promise.all([
-      this.loadCsv(this.params.depthMapPath),
+      this.loadCsv(dataPath),
       this.loadTopojson(this.params.topojsonPath)
     ]);
 
@@ -796,6 +795,10 @@ export class Main {
 
 
   initStatsjs = () => {
+    if (this.params.showStats === false) {
+      return;
+    }
+
     let container = document.getElementById("statsjsContainer");
     if (!container) {
       container = document.createElement("div");
@@ -821,7 +824,9 @@ export class Main {
 
     {
       // stats.jsを更新
-      this.statsjs.update();
+      if (this.statsjs && this.params.showStats) {
+        this.statsjs.update();
+      }
 
       // カメラコントローラーを更新
       this.controller.update();

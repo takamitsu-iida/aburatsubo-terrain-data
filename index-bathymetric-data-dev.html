@@ -306,8 +306,12 @@
 
 <script type="module">
   import WebGL from './static/libs/capabilities/WebGL.js';
+
+  // For stable version
   // import { Main } from "./static/site/js/visualize-bathymetric-data.js";
-  import { Main } from "./static/site/js/visualize-bathymetric-data-debug.js";
+
+  // For development/debugging
+  import { Main } from "./static/site/js/visualize-bathymetric-data-dev.js";
 
   window.addEventListener("load", () => {
     if (WebGL.isWebGL2Available()) {
@@ -319,11 +323,16 @@
         { lon: 139.61595853, lat: 35.15950000, depth: 0, name_ja: '油壷湾', name: 'Aburatsubo' },
       ];
 
+      const availableDatasets = {
+          'bathymetric_data': './static/data/bathymetric_data.csv',
+          'quadtree_data': './static/data/quadtree_data.csv',
+          'kriging_data': './static/data/kriging_data.csv',
+      };
+
       const params = {
-        // 水深データのCSVファイルのURL
-        depthMapPath: "./static/data/quadtree_data.csv",
-        // depthMapPath: "./static/data/kriging_data.csv",
-        // depthMapPath: "./static/data/bathymetric_data.csv",
+        // データセット
+        currentDataset: 'bathymetric_data',  // 'quadtree_data', 'kriging_data', 'bathymetric_data'
+        availableDatasets: availableDatasets,
         landmarks: landmarks,  // default []
         guiClosed: false,  // GUIをクローズド状態で開始する
         wireframe: false,
@@ -332,6 +341,7 @@
         showLandmarks: true,
         showScale: true,
         showCompass: true,
+        showStats: true,
         enableTriangleFilter: true,  // デローネ三角形の辺の長さに制限を付ける場合はtrue
       };
 

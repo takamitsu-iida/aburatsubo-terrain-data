@@ -187,6 +187,9 @@ export class Main {
     // コンパスを表示する？
     showCompass: true,
 
+    // stats.jsを表示する？
+    showStats: false,
+
     // デローネ三角形のフィルタリングパラメータ
     enableTriangleFilter: true,
     maxTriangleEdgeLength: 20,  // エッジの最大長さ 画面サイズxzGridSizeが200の場合の初期値
@@ -710,6 +713,10 @@ export class Main {
 
 
   initStatsjs = () => {
+    if (this.params.showStats === false) {
+      return;
+    }
+
     let container = document.getElementById("statsjsContainer");
     if (!container) {
       container = document.createElement("div");
@@ -735,7 +742,9 @@ export class Main {
 
     {
       // stats.jsを更新
-      this.statsjs.update();
+      if (this.statsjs && this.params.showStats) {
+        this.statsjs.update();
+      }
 
       // カメラコントローラーを更新
       this.controller.update();
