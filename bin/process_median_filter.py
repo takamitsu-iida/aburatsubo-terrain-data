@@ -171,7 +171,7 @@ if __name__ == '__main__':
         # 入力CSVファイルをPandasのデータフレームとして読み込む
         df = load_csv(input_file_path)
         if df is None:
-            logger.error("CSVファイルの読み込みに失敗しました。")
+            logger.error(f"CSVファイルの読み込みに失敗しました。{input_file_path}")
             return
 
         #

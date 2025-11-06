@@ -181,9 +181,14 @@ def save_points_as_csv(points: List[Dict[str, float]], output_file_path: Path) -
         points: List of dictionaries containing {'lat': ..., 'lon': ..., 'depth': ...}.
         output_file_path: Path to the output CSV file.
     """
+
+    must_keys = ['lat', 'lon', 'depth']
+
     try:
         with output_file_path.open('w') as f:
             for p in points:
+                if not all(k in p for k in must_keys):
+                    continue
                 line = f"{p['lat']},{p['lon']},{p['depth']}"
                 if 'epoch' in p:
                     line += f",{p['epoch']}"

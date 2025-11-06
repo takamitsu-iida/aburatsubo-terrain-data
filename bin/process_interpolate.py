@@ -314,7 +314,7 @@ def interpolate_empty_leaf_nodes(quadtree: Quadtree):
         # IDW補間 (inverse distance weighted algorithm)
         if len(neighbor_points) > 3:
             avg_lat, avg_lon, avg_depth = idw_interpolate_value(mid_lat, mid_lon, neighbor_points)
-            node.points.append({'lat': avg_lat, 'lon': avg_lon, 'depth': avg_depth})
+            node.points.append({'lat': avg_lat, 'lon': avg_lon, 'depth': avg_depth, 'epoch': 0})
 
         # TODO: 平均ではなくクリギングなどの高度な補間手法を使う
 
@@ -428,8 +428,8 @@ if __name__ == '__main__':
         logger.info(f"Points data saved to: {output_file_path}")
 
         # 四分木の可視化画像を保存する
-        output_image_filename = f"{input_file_path.stem}_qtree.png"
-        output_image_path = image_dir.joinpath(output_image_filename)
+        #output_image_filename = f"{input_file_path.stem}_qtree.png"
+        #output_image_path = image_dir.joinpath(output_image_filename)
         #save_quadtree_image(quadtree=quadtree, filename=output_image_path, draw_points=False)
 
     #
