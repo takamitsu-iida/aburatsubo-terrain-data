@@ -44,7 +44,7 @@ except ImportError as e:
 #
 try:
     from load_save_csv import load_csv, save_points_as_csv
-    from qtree import Quadtree
+    from qtree import Quadtree, create_quadtree_from_df
 except ImportError as e:
     logging.error(f"module import error: {e}")
     sys.exit(1)
@@ -233,36 +233,6 @@ def __process_kriging(df: pd.DataFrame):
         print("\n補間可能なデータ領域がありませんでした。")
 
 
-def init_quadtree(df: pd.DataFrame) -> Quadtree:
-    # lat, lonの最大・最小
-    min_lat = df['lat'].min()
-    max_lat = df['lat'].max()
-    min_lon = df['lon'].min()
-    max_lon = df['lon'].max()
-
-    # 中央座標を求める
-    mid_lat = (min_lat + max_lat) / 2.0
-    mid_lon = (min_lon + max_lon) / 2.0
-
-    # ルートになる四分木の境界を正方形で設定
-    square_size = max(max_lat - mid_lat, max_lon - mid_lon)
-    bounds = (mid_lat - square_size, mid_lon - square_size, mid_lat + square_size, mid_lon + square_size)
-
-    # 四分木を初期化
-    quadtree = Quadtree(bounds)
-
-    # 四分木にデータを挿入
-    for _, row in df.iterrows():
-        point = {'lat': row['lat'], 'lon': row['lon'], 'depth': row['depth']}
-        if 'epoch' in df.columns:
-            point['epoch'] = row['epoch']
-        if 'cluster' in df.columns:
-            point['cluster'] = row['cluster']
-        quadtree.insert(point)
-
-    return quadtree
-
-
 def aggregate_leaf_nodes(quadtree: Quadtree):
     # 最も深いノードについては、そのノード内のポイントの平均値に置き換える
     deepest_level = quadtree.get_deepest_level()
@@ -398,7 +368,7 @@ if __name__ == '__main__':
             return
 
         # 四分木を初期化
-        quadtree = init_quadtree(df)
+        quadtree = create_quadtree_from_df(df)
 
         # 四分木の統計情報を表示する
         logger.info(f"Initial Quadtree stats\n{quadtree.get_stats_text()}\n")
