@@ -26,8 +26,8 @@ ip: dd ol ## step3. interpolate 欠損値を補間して新しいCSVファイル
 mf: dd ol ip ## step4. median filter メディアンフィルタを適用して新しいCSVファイルを作成する
 	@python3 bin/process_median_filter.py --input $(DATA_BASENAME)$(DEDUP)$(OUTLIER)$(INTERPOLATE).csv --output $(DATA_BASENAME)$(DEDUP)$(OUTLIER)$(INTERPOLATE)$(MEDIAN_FILTER).csv
 
-all: dd ol ip mf ## 重複排除→外れ値除去→補間→メディアンフィルタを順に全て実行
-	@cp data/$(DATA_BASENAME)$(DEDUP)$(OUTLIER)$(INTERPOLATE)$(MEDIAN_FILTER).csv static/data/processed_data.csv
+all: dd ol ip mf ## 重複排除→外れ値除去→補間→メディアンフィルタを順に全て実行して最終データを作成する
+	@cp data/$(DATA_BASENAME)$(DEDUP)$(OUTLIER)$(INTERPOLATE)$(MEDIAN_FILTER).csv static/data/bathymetric_data.csv
 
 scatter: ## 散布図を作成する
 	@if [ -f data/$(DATA_BASENAME).csv ]; then \
@@ -40,5 +40,8 @@ scatter: ## 散布図を作成する
 		python3 bin/draw_scatter.py --input $(DATA_BASENAME)$(DEDUP)$(OUTLIER).csv --title "Outlier removed"; \
 	fi
 
-clean: ## データファイルを削除する
-	@rm -f data/data_dedup.csv
+clean: ## 中間データファイルを削除する
+	@rm -f data/*_dd.csv
+	@rm -f data/*_dd_ol.csv
+	@rm -f data/*_dd_ol_ip.csv
+	@rm -f data/*_dd_ol_ip_mf.csv

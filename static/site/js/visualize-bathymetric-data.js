@@ -135,6 +135,9 @@ export class Main {
     // topojsonを変換してGeoJSONデータにしたもの（いまは未使用）
     geojsonData: null,
 
+    // guiをクローズド状態で開始するか？
+    guiClosed: false,
+
     // ポイントクラウドを表示するか？
     showPointCloud: true,
 
@@ -186,7 +189,7 @@ export class Main {
 
     // デローネ三角形のフィルタリングパラメータ
     enableTriangleFilter: true,
-    maxTriangleEdgeLength: 15,  // エッジの最大長さ 画面サイズxzGridSizeが200の場合の適切な初期値
+    maxTriangleEdgeLength: 20,  // エッジの最大長さ 画面サイズxzGridSizeが200の場合の初期値
   }
 
   // 地形図のポイントクラウド（guiで表示を操作するためにインスタンス変数にする）
@@ -592,6 +595,13 @@ export class Main {
       width: 300,
     });
 
+    // 画面が小さい場合は初期状態で閉じた状態にする
+    if (this.params.guiClosed ||
+      window.matchMedia('(max-width: 640px)').matches ||
+      window.matchMedia('(max-height: 640px)').matches) {
+      gui.close();
+    }
+
     // 一度だけ実行するための関数
     const doLater = (job, tmo) => {
 
@@ -695,10 +705,6 @@ export class Main {
         this.initContents(); // メッシュを再構築
       });
 
-    // 画面が小さい場合は初期状態で閉じた状態にする
-    if (window.matchMedia('(max-width: 640px)').matches) {
-      gui.close();
-    }
 
   }
 

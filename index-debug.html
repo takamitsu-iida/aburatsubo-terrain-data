@@ -320,11 +320,13 @@
 
       const params = {
         // 水深データのCSVファイルのURL
-        depthMapPath: "./static/data/kriging_data.csv",
+        depthMapPath: "./static/data/quadtree_initial.csv",
+        // depthMapPath: "./static/data/kriging_data.csv",
         landmarks: landmarks,  // default []
+        guiClosed: false,  // GUIをクローズド状態で開始する
         wireframe: false,
         autoRotate: false,
-        showPointCloud: true,
+        showPointCloud: false,
         showLandmarks: true,
         showScale: true,
         showCompass: true,

@@ -321,15 +321,16 @@
 
       const params = {
         // 水深データのCSVファイルのURL
-        depthMapPath: "./static/data/processed_data.csv",
+        depthMapPath: "./static/data/bathymetric_data.csv",
         landmarks: landmarks,  // default []
+        guiClosed: true,  // GUIをクローズド状態で開始する
         wireframe: false,
         autoRotate: false,
         showPointCloud: false,
         showLandmarks: true,
         showScale: true,
         showCompass: true,
-        enableTriangleFilter: false,  // デローネ三角形の辺の長さに制限を付ける場合はtrue
+        enableTriangleFilter: true,  // デローネ三角形の辺の長さに制限を付ける場合はtrue
       };
 
       new Main(params);
