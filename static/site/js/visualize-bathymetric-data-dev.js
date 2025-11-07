@@ -196,7 +196,7 @@ export class Main {
     showStats: true,
 
     // デローネ三角形のフィルタリングパラメータ
-    enableTriangleFilter: true,
+    enableDelaunayFilter: true,
     maxTriangleEdgeLength: 20,  // エッジの最大長さ 画面サイズxzGridSizeが200の場合の初期値
   }
 
@@ -759,16 +759,16 @@ export class Main {
       .name(navigator.language.startsWith("ja") ? "縮尺表示" : "Show scale");
 
     // デローネ三角形フィルタフォルダ
-    const triangleFolder = gui.addFolder(navigator.language.startsWith("ja") ? "三角形フィルタ" : "Triangle Filter");
+    const delaunayFolder = gui.addFolder(navigator.language.startsWith("ja") ? "デローネフィルタ" : "Delaunay Filter");
 
-    triangleFolder
-      .add(this.params, "enableTriangleFilter")
+    delaunayFolder
+      .add(this.params, "enableDelaunayFilter")
       .name(navigator.language.startsWith("ja") ? "フィルタ有効" : "Enable Filter")
       .onChange(() => {
         this.initContents(); // メッシュを再構築
       });
 
-    triangleFolder
+    delaunayFolder
       .add(this.params, "maxTriangleEdgeLength")
       .name(navigator.language.startsWith("ja") ? "最大辺長" : "Max Edge Length")
       .min(5)
@@ -912,7 +912,7 @@ export class Main {
 
   // 三角形が有効かどうかを判定する関数
   isValidTriangle = (posA, posB, posC) => {
-    if (!this.params.enableTriangleFilter) {
+    if (!this.params.enableDelaunayFilter) {
       return true;
     }
 
