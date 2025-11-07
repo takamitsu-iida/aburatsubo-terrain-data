@@ -31,6 +31,9 @@ try:
     # データを整形して表示
     from tabulate import tabulate
 
+    # KDTreeを使って高速に近傍点を探索する
+    # from scipy.spatial import cKDTree
+
 except ImportError as e:
     print(f"必要なライブラリがインストールされていません: {e}")
     sys.exit(1)
@@ -252,7 +255,7 @@ class QuadtreeNode:
 
 
     def get_points(self) -> List[Dict[str, float]]:
-        """ ノード内のポイントを全て取得 """
+        """ ノード内のポイントを（子ノード含め）全て取得 """
         points = self.points.copy()
         if not self.is_leaf():
             for child in self.children:
@@ -261,7 +264,7 @@ class QuadtreeNode:
 
 
     def average(self) -> Dict[str, float]:
-        """ ノード内にある全てのポイントの平均値を計算 """
+        """ ノード内にある（子ノードを含めた）全てのポイントの平均値を計算 """
         points = self.get_points()
         n = len(points)
         if n == 0:
@@ -270,13 +273,6 @@ class QuadtreeNode:
         avg_lon = sum(p['lon'] for p in points) / n
         avg_depth = sum(p['depth'] for p in points) / n
         return {'lat': avg_lat, 'lon': avg_lon, 'depth': avg_depth}
-
-
-    def replace_average(self) -> None:
-        """ ノード内のポイントを平均値で置き換える """
-        avg_point = self.average()
-        if avg_point:
-            self.points = [avg_point]
 
 
 class Quadtree:
@@ -292,9 +288,6 @@ class Quadtree:
     # 例えば、2メートルに設定すると、最小の葉ノードの一辺の長さが約2メートル以下（1.0～2.0）になる
     MIN_GRID_WIDTH: float = 2.0
 
-    # 可視化時の最小グリッド幅（メートル単位）
-    DISPLAY_GRID_WIDTH: float = 30.0
-
     # ノードあたりの最大ポイント数
     # メッシュを作るのに必要な数は3なので、分割後にメッシュが成立するように倍の6に設定
     MAX_POINTS: int = 6
@@ -304,9 +297,25 @@ class Quadtree:
         # ルートノードを作成
         self.root = QuadtreeNode(bounds=bounds, level=0, parent=None)
 
+        # 四分木の最大分割レベルを決定
+        self._determine_level_limit()
+
+        # 1mあたりの緯度の差分を計算
+        self.lat_per_meter = 1 / 111320.0
+
+        # 1mあたりの経度の差分を計算
+        mid_lat = (bounds[0] + bounds[2]) / 2.0
+        # self.lon_per_meter = 1 / (111320.0 * np.cos(np.deg2rad(mid_lat)))
+        self.lon_per_meter = 1 / (111320.0 * math.cos(math.radians(mid_lat)))
+
+
+    # 四分木の最大分割レベルを決定する
+    def _determine_level_limit(self) -> None:
+        """ 四分木の最大分割レベルを決定する """
+
         # boundsは (lat1, lon1, lat2, lon2) の形式で、NW, SEの対角線で囲まれた矩形領域を想定
         # boundsの各値を取得
-        lat1, lon1, lat2, lon2 = bounds
+        lat1, lon1, lat2, lon2 = self.root.bounds
 
         # 各辺の大きさ（緯度・経度の差）をメートルに変換
         # 南西→北西（緯度方向の距離）
@@ -321,10 +330,8 @@ class Quadtree:
         # 2進法で分割していくので、LEVEL_LIMITは log2(square_length / MIN_GRID_WIDTH) の切り上げ
         if square_length > 0 and self.MIN_GRID_WIDTH > 0:
             Quadtree.LEVEL_LIMIT = int(math.ceil(math.log2(square_length / self.MIN_GRID_WIDTH)))
-            Quadtree.DISPLAY_LEVEL = int(math.ceil(math.log2(square_length / self.DISPLAY_GRID_WIDTH)))
 
         logger.info(f"Quadtree initialized with LEVEL_LIMIT={Quadtree.LEVEL_LIMIT}")
-        logger.info(f"DISPLAY_LEVEL={Quadtree.DISPLAY_LEVEL}")
         logger.info(f"Root square length={square_length:.2f} m")
 
 
@@ -418,9 +425,6 @@ class Quadtree:
         else:
             deepest_node_size = 0.0
 
-        # DISPLAY_LEVELのノード数も追加
-        display_nodes = self.get_nodes_at_level(self.DISPLAY_LEVEL)
-
         return {
             "total_nodes": len(all_nodes),
             "leaf_nodes": len(leaf_nodes),
@@ -429,8 +433,7 @@ class Quadtree:
             "deepest_level": deepest_level,
             "deepest_nodes_count": len(deepest_nodes),
             "max_leaf_points": max(leaf_points_counts) if leaf_points_counts else 0,
-            "deepest_node_size_m": deepest_node_size,
-            "display_nodes_count": len(display_nodes)
+            "deepest_node_size_m": deepest_node_size
         }
 
 
@@ -442,7 +445,6 @@ class Quadtree:
         table = [[k, f"{v:.3f}" if isinstance(v, float) else v] for k, v in stats.items()]
         headers = ["項目", "値"]
         return tabulate(table, headers=headers, numalign='right', tablefmt='github')
-
 
 
     def save_to_csv(self, filepath: Path) -> None:
@@ -464,6 +466,33 @@ class Quadtree:
                         'depth': point['depth']
                     })
         logger.info(f"Quadtree data saved to CSV: {filepath}")
+
+
+    def rebuild(self) -> None:
+        """ 四分木を再構築する """
+        all_points = self.root.get_points()
+
+        # 四分木の最大分割レベルを再決定
+        self._determine_level_limit()
+
+        # 新しいルートノードを作成
+        self.root = QuadtreeNode(bounds=self.root.bounds, level=0, parent=None)
+
+        # すべてのポイントを再挿入
+        for point in all_points:
+            self.insert(point)
+
+
+    def aggregate_deepest_node_points(self):
+        """ 最も深いノードのポイントを平均化して集約する """
+        # 最も深いノードについては、そのノード内のポイントの平均値に置き換える
+        deepest_level = self.get_deepest_level()
+        nodes = [node for node in self.get_leaf_nodes() if node.level == deepest_level and len(node.points) > 1]
+        for node in nodes:
+            avg_point = node.average()
+            node.points = [avg_point]
+
+
 
 def get_latlon_delta(lat: float, lon: float, meters: float = 1.0) -> tuple[float, float]:
     """
@@ -501,7 +530,6 @@ def save_quadtree_image(
     """ 四分木の可視化画像を保存する """
 
     leaf_nodes = quadtree.get_leaf_nodes()
-    display_nodes = quadtree.get_nodes_at_level(quadtree.DISPLAY_LEVEL)
 
     # ノード全体の座標範囲を取得
     lats = []
@@ -514,19 +542,6 @@ def save_quadtree_image(
     min_lon, max_lon = min(lons), max(lons)
 
     fig, ax = plt.subplots(figsize=figsize, dpi=dpi)
-
-    # DISPLAY_LEVELのノードを別色（例: orange）で描画
-    for node in display_nodes:
-        lat1, lon1, lat2, lon2 = node.bounds
-        width = lon2 - lon1
-        height = lat2 - lat1
-        ax.add_patch(
-            plt.Rectangle(
-                (lon1, lat1), width, height,
-                fill=False, facecolor='none', edgecolor='orange', linewidth=2, linestyle='--', alpha=0.7
-            )
-        )
-
 
     # ノードごとに矩形を必ず描画
     for node in leaf_nodes:
@@ -604,14 +619,11 @@ def create_quadtree_from_df(df: pd.DataFrame) -> Quadtree:
     return quadtree
 
 
-
 if __name__ == '__main__':
 
     # ローカルファイルからインポート
     from load_save_csv import load_csv
 
-    # KDTreeを使って高速に近傍点を探索する
-    from scipy.spatial import cKDTree
 
     def misc():
         from geopy.distance import great_circle
@@ -630,55 +642,6 @@ if __name__ == '__main__':
 
 
 
-
-
-    def interpolate_grid(node, grid_size=10):
-        """
-        四分木ノードの領域をgrid_size（点間距離）でグリッド化し、IDWでdepth補間
-        """
-
-        import numpy as np
-        from scipy.spatial import Delaunay
-
-        lat1, lon1, lat2, lon2 = node.bounds
-        points = node.get_points()
-        if len(points) < 3:
-            return None  # メッシュ化不可
-
-        # グリッド生成
-        n_lat = max(2, int(distance((lat1, lon1), (lat2, lon1)).meters // grid_size))
-        n_lon = max(2, int(distance((lat1, lon1), (lat1, lon2)).meters // grid_size))
-        grid_lats = np.linspace(lat1, lat2, n_lat)
-        grid_lons = np.linspace(lon1, lon2, n_lon)
-        grid_points = np.array([(lat, lon) for lat in grid_lats for lon in grid_lons])
-
-        # IDW補間
-        def idw(lat, lon, points, power=2):
-            dists = np.array([np.hypot(lat - p['lat'], lon - p['lon']) for p in points])
-            if np.any(dists == 0):
-                return [p['depth'] for i, p in enumerate(points) if dists[i] == 0][0]
-            weights = 1 / (dists ** power)
-            depths = np.array([p['depth'] for p in points])
-            return np.sum(weights * depths) / np.sum(weights)
-
-        grid_depths = np.array([idw(lat, lon, points) for lat, lon in grid_points])
-
-        # メッシュ化（Delaunay三角形分割）
-        tri = Delaunay(grid_points)
-
-        mesh_df = pd.DataFrame({
-            'lat': grid_points[:, 0],
-            'lon': grid_points[:, 1],
-            'depth': grid_depths
-        })
-        triangles = tri.simplices.tolist()
-
-        return mesh_df, triangles
-
-
-
-
-
     def main():
 
         data_filename = "ALL_depth_map_data_202510_dd_ol.csv"
@@ -693,21 +656,74 @@ if __name__ == '__main__':
             logger.error(f"データの読み込みに失敗しました: {data_path}")
             return
 
-        # 四分木を作成
-        quadtree = create_quadtree_from_df(df)
 
+        # STEP.1
+        # 細かい領域で四分木を作成して、データを集約する
+
+        # 四分木を作成
+        Quadtree.MAX_POINTS = 3        # デフォルトは6
+        Quadtree.MIN_GRID_WIDTH = 2.0  # デフォルトは2.0メートル
+        quadtree = create_quadtree_from_df(df)
         # 四分木の統計情報を表示
         logger.info(f"Initial Quadtree stats\n{quadtree.get_stats_text()}\n")
+
+        # 最も深いレベルにあるリーフノードのポイントを平均化して集約
+        quadtree.aggregate_deepest_node_points()
+        logger.info("Aggregated deepest node points.")
+        logger.info(f"Post-aggregation Quadtree stats\n{quadtree.get_stats_text()}\n")
+
+
+        # STEP.2
+        # 大きめの領域で四分木を作成して、密度の薄いノードを対象に補間する
+        Quadtree.MAX_POINTS = 6
+        Quadtree.MIN_GRID_WIDTH = 20.0  # 10～20mの領域に収まる
+        quadtree.rebuild()
+        logger.info(f"Rebuilt Quadtree stats\n{quadtree.get_stats_text()}\n")
+
+        # 最も深いレベルを除く、ポイントを持つ全てのリーフノードを取得
+        non_deepest_nodes = [
+            node for node in quadtree.get_nonempty_leaf_nodes()
+            if node.level < quadtree.get_deepest_level()
+        ]
+        logger.info(f"Interpolating {len(non_deepest_nodes)} non-deepest leaf nodes...")
+
+        # これらノードが持つポイントを取り出して、N, W, E, Sの4点を追加して補間する
+        # 4m四方の領域を考慮する
+        directions = [[0.0, 4.0], [4.0, 0.0], [0.0, -4.0], [-4.0, 0.0]]  # 北、東、南、西
+        for node in non_deepest_nodes:
+            for point in node.points:
+                lat = point['lat']
+                lon = point['lon']
+                # 4方向に4m移動した点を追加、深さはその点の値を使う
+                for d in directions:
+                    new_lat = lat + d[0] * quadtree.lat_per_meter
+                    new_lon = lon + d[1] * quadtree.lon_per_meter
+                    new_point = {'lat': new_lat, 'lon': new_lon, 'depth': point['depth']}
+                    quadtree.insert(new_point)
+        logger.info("Inserted N, E, S, W points for interpolation.")
+        logger.info(f"Post-insertion Quadtree stats\n{quadtree.get_stats_text()}\n")
+
+
+        # STEP.3
+        # ポイントが増えたので、もう一度細かい領域で四分木を作成して、データを集約する
+        # 四分木を作成
+        Quadtree.MAX_POINTS = 3        # デフォルトは6
+        Quadtree.MIN_GRID_WIDTH = 2.0  # デフォルトは2.0メートル
+        quadtree.rebuild()
+
+        # 最も深いレベルにあるリーフノードのポイントを平均化して集約
+        quadtree.aggregate_deepest_node_points()
+        logger.info("Aggregated deepest node points.")
+        logger.info(f"Post-aggregation Quadtree stats\n{quadtree.get_stats_text()}\n")
 
         # CSVとして保存する
         output_filename = "quadtree_data.csv"
         output_filepath = app_home.joinpath("static", "data", output_filename)
         quadtree.save_to_csv(output_filepath)
 
-
         # イメージ保存
         image_path = image_dir.joinpath("quadtree_data.png")
-        save_quadtree_image(quadtree, str(image_path), draw_points=True)
+        save_quadtree_image(quadtree, str(image_path), draw_points=False)
         logger.info(f"Quadtree image saved to {image_path}")
 
     #
