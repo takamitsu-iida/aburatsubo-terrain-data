@@ -344,55 +344,47 @@ XZ平面に地図を描画して、Y軸のマイナス方向が深さになる�
 
 [A dive into spatial search algorithms](https://blog.mapbox.com/a-dive-into-spatial-search-algorithms-ebd0c5e39d2a)
 
-<br><br>
+<br><br><br><br>
 
 # 実装メモ
 
-Go言語の方が書きやすいものの、データ加工処理の容易さを考慮してPythonで処理。
-
 <br>
 
-## 重複削除のやり方
+最初はGo言語で書いてみたものの、データ処理の容易さを考慮して現在は全てPythonで処理していあｍす。
 
-groupbyで集約しつつ、水深の平均を計算してそれに置き換える。
-
-元データから重複行をすべて削除し、groupbyで計算したものを加える。
-
-```python
-    def process_duplicated(df: pd.DataFrame):
-        dfx = df[["lat", "lon", "depth"]]
-        dfx_uniq = df.drop_duplicates(subset=["lat", "lon"], keep=False)
-        dfx_duplicated = dfx.groupby(["lat", "lon"])["depth"].mean().reset_index()
-        df = pd.concat([dfx_uniq, dfx_duplicated]).reset_index(drop=True)
-        return df
-```
-
-<br>
+<br><br>
 
 ## 外れ値検出
 
-Local Outlier Factor（局所外れ値因子法）を利用する。
+Local Outlier Factor（局所外れ値因子法）を利用します。
 
-LOFの考え方
+**LOFの考え方**
 
-- 自分を中心に円を書き、k個の近傍点が入るように円を拡大していく。
+- 自分を中心に円を書き、k個の近傍点が入るように円を拡大していく
 
 - 円に入ったk個の点それぞれにつき、同じように円を書き、k個の近傍点が入るように円を拡大していく
 
 - 自分の円を含め、合計1+k個の円ができる
 
-- その円の大きさが、やたら大きい場合は異常値なのではないか、と推測する
+- 自分の円の大きさが、他の円と比べてやたら大きい場合は異常値なのではないか、と推測する
 
-LOFの手順
+<br>
 
-1. 到達可能性距離（Reachability Distance）の計算
+**LOFの手順**
 
-2. 局所到達可能性密度（Local Reachability Density）の計算
+1. 到達可能性距離（Reachability Distance）を計算
 
-3. LOF（Local Outlier Factor）の計算
+2. 局所到達可能性密度（Local Reachability Density）を計算
 
+3. LOF（Local Outlier Factor）を計算
 
-### 到達可能性距離（Reachability Distance）
+<br>
+
+### 到達可能性距離とは（Reachability Distance）
+
+前述の円の大きさのことです。
+
+このように定義されます。
 
 ` reachability_disktance_k(a,b) = max{k_distance(b), d(a, b)} `
 
@@ -405,18 +397,20 @@ LOFの手順
 
 k=2の場合、
 
-- aを取り出す。
+- aを取り出す
 - aから一番近い隣接ノードbを取り出す
-- bからk番目に近い点を取り出す。この場合はdを取り出す
+- bからk番目に近い点を取り出す（この場合はdを取り出す）
 - a-b間の距離とb-d間の距離の大きい方を取り出したものが `reachability_disktance_k(a,b)` となる
 - aから二番目に近い隣接ノードcを取り出す
 - cからk番目に近い点を取り出す、以下同様
 
-自分を含めると1+k個の到達可能性距離を求めることになる
+自分を含めて1+k個の到達可能性距離を求めることになります。
 
 <br>
 
-### 局所到達可能性密度（Local Reachability Density）
+### 局所到達可能性密度とは（Local Reachability Density）
+
+このように定義されます。
 
 `lrd_k(a) = 1 ÷ (reachability_disktance_k(a, b) + reachability_disktance_k(a, c)) / 2`
 
@@ -433,31 +427,31 @@ k=2の場合、
 - reachability_disktance_k(a, b)を計算する、つまりbからk番目に遠い点の距離を計算して、大きい方を採用する
 - reachability_disktance_k(a, c)を計算する、つまりcからk番目に遠い点の距離を計算して、大きい方を採用する
 - reachability_disktance_k(a, b)とreachability_disktance_k(a, c)の平均値を出す
-- それを1で割る
+- 1をそれで割る
 
-### LOF（Local Outlier Factor）
+<br>
+
+### LOFとは（Local Outlier Factor）
+
+このように定義されます
 
 `LOF_k(a) = ( lrd_k(b)/lrd_k(a) + lrd_k(c)/lrd_k(a) ) / k`
 
-これが大きいほど、異常値と考えられる。
+これが大きいほど、異常値と考えられます。
 
 <br>
 
 ### scikit-learnによるLOF
 
-自分で計算すると、k個の近傍点を取り出すところが難しい。
-
-scikit-learnに実装されているLocalOutlierFactorを使うと簡単に計算できる。
-
-
+自分で計算すると大変ですが、scikit-learnに実装されているLocalOutlierFactorを使えば簡単に処理できます。
 
 ```python
-from sklearn.neighbors import LocalOutlierFactor  # process_outlier()
+from sklearn.neighbors import LocalOutlierFactor
 ```
 
-kの値は、引数n_neighborsで与える。
+kの値は、引数n_neighborsで与えます。
 
-適切な値は試行錯誤で決める。10とかが適切かな？
+適切な値は試行錯誤で決めますが、デフォルト値が20なので、まずはそのまま適用します。
 
 ```python
         def local_outlier_factor(n_neighbors=20):
@@ -468,7 +462,7 @@ kの値は、引数n_neighborsで与える。
             return predicted
 ```
 
-predictedは外れ値なら-1、正常値なら1が格納されたアレイ。
+predictedは外れ値なら-1、正常値なら1が格納された行列です。
 
 ```python
         # 外れ値を除く処理を施す
@@ -481,15 +475,17 @@ predictedは外れ値なら-1、正常値なら1が格納されたアレイ。
         df = df.iloc[np.where(pred > 0)]
 ```
 
-<br>
+<br><br>
 
 ## データ補間
 
-ポイントクラウドを可視化してみると補間の必要性が直感的に理解できる。
+ポイントクラウドを可視化してみると補間の必要性が直感的に理解できます。
 
-GPS座標が存在する範囲をグリッド化して、各グリッドでの推定値を計算する。
+この手のデータ補間にはIDWアルゴリズムもしくはクリギングが使われます。
 
-推定値はinverse distance weighted algorithmを用いる。
+**IDW(inverse distance weighted)**
+
+GPS座標が存在する範囲をグリッド化して、各グリッドでの推定値を計算します。
 
 ![inverse distance weighted algorithm](./assets/inv_dist_interp.gif "inverse distance weighted algorithm")
 
@@ -497,43 +493,17 @@ GPS座標が存在する範囲をグリッド化して、各グリッドでの�
 >
 > https://www.e-education.psu.edu/natureofgeoinfo/c7_p9.html
 
-そのためには、グリッドの格子点の近傍に存在する値を取ってくる必要がある。
+グリッドの格子点の近傍に存在する値を取ってくる必要がありますが、この方法はいくつか考えられます。
 
-これにはR-treeを使う。
+KD-Treeを使って半径何メートルの中の点を取ってくる、というのが一番簡単な気がします。
 
-ということで、当面はR-treeを使った近傍探索のやり方を模索する。
+他にもR-treeを使って、指定した領域の範囲に入る点を取ってくる、という方法もあります。
 
-
-<br>
-
-### Rtree
-
-PythonでのRtreeの実装はいくつか存在する。
-
-libspatialindexをPythonでラッピングしたRtreeを使ってみる。
-
-2024年10月時点ではバージョン1.3がインストールされた。
-
-```bash
-(.venv) iida$ pip install rtree
-Collecting rtree
-  Downloading Rtree-1.3.0-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl (543 kB)
-     |████████████████████████████████| 543 kB 912 kB/s
-Installing collected packages: rtree
-Successfully installed rtree-1.3.0
-```
-
-> [!NOTE]
->
-> libspatialindexのインストールが伴うので、Macだとコンパイル作業が走るかもしれない。
->
-
-
-<br>
+<br><br><br>
 
 ### jupyter notebook
 
-試行錯誤しながらデータを加工するときにはjupyter notebookを使えたほうが便利。
+（今は使ってませんが）試行錯誤しながらデータを加工するにはjupyter notebookが便利です。
 
 WSLにインストールする方法。
 
@@ -541,22 +511,22 @@ WSLにインストールする方法。
 pip install jupyter
 ```
 
-venvを使っている場合はその環境下にインストールされる。
+venvを使っている場合はその環境下にインストールされます。
 
-WSLでjupyterを走らせるには、設定の追加が必要。
+WSLでjupyterを走らせるには、設定の追加が必要です。
 
-`--generate-config`オプションをつけて起動すると、デフォルトのコンフィグファイルが `~/.jupyter/jupyter_notebook_config.py` に作成される。
+`--generate-config`オプションをつけて起動すると、デフォルトのコンフィグファイルが `~/.jupyter/jupyter_notebook_config.py` に作成されます。
 
 ```bash
 iida@FCCLS0073460:~/git/aburatsubo-terrain-data$ jupyter notebook --generate-config
 Writing default config to: /home/iida/.jupyter/jupyter_notebook_config.py
 ```
 
-場所はホームディレクトリ直下なので、このファイルを環境ごとに変更することはできない。
+ホームディレクトリ直下に作られるので、環境ごとに設定を変更することはできません。
 
-なので、それをコピーしてjupyterを実行するときに、編集した別のコンフィグファイルを指定する。
+なので、このファイルをコピーして編集した別のコンフィグファイルを作ります。
 
-まずは、ノートブックを保存したいディレクトリ（ここではipynb）を作って、そこに移動し、デフォルトのコンフィグファイルをコピーする。
+まずは、ノートブックを保存したいディレクトリ（ここではipynb）を作って、そこに移動し、デフォルトのコンフィグファイルをコピーします。
 
 ```bash
 mkdir ipynb
@@ -564,42 +534,41 @@ cd ipynb
 cp ~/.jupyter/jupyter_notebook_config.py .
 ```
 
-追加すべき設定は `c.NotebookApp.use_redirect_file = False` という1行だけなので、以下のようにコンフィグファイルの最後に追記する。
+追加すべき設定は `c.NotebookApp.use_redirect_file = False` という1行だけなので、以下のようにコンフィグファイルの最後に追記します。
 
 ```bash
 $ echo "c.NotebookApp.use_redirect_file = False" >> jupyter_notebook_config.py
 ```
 
-実行するときに `--config` オプションで編集したファイルを指定する。
+実行するときに `--config` オプションで編集した設定ファイルを指定します。
 
 ```bash
 jupyter notebook --config jupyter_notebook_config.py
 ```
 
-終了するときは `ctrl-c` を2回連打する。
+終了するときは `ctrl-c` を2回連打します。
 
-ターミナルを占有されてしまうのを避けるには、バックグランドで起動する。
+ターミナルを占有されてしまうのを避けるには、バックグランドで起動します。
 
 ```bash
 nohup jupyter notebook --config jupyter_notebook_config.py >> jupyter.log 2>&1 &
 ```
 
-これを停止するならブラウザで `File -> Shut Down` でよい。
+停止するにはブラウザで `File -> Shut Down` を選択します。
 
 ```bash
 pgrep -f jupyter-notebook
 ```
 
-でプロセスを探してkillしてもよい。
+でプロセスを探してkillしても同じです。
 
-
-実行時のオプションが多くて手打ちするのは大変なのでシェルスクリプトにした。
+起動時のオプションが多くて手打ちするのは大変なのでシェルスクリプトにしました。
 
 ```bash
 ./start-jupyter.sh
 ```
 
-これの中身。
+シェルスクリプトの中身はこうなっています。
 
 ```bash
 #!/bin/bash
