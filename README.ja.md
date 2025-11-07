@@ -2,34 +2,58 @@
 
 <br>
 
-**最新のCSVファイル 2025年10月**
+手漕ぎボートで油壷の海に浮かんだときの水深データです。
 
-処理前
+<br><br>
 
-https://takamitsu-iida.github.io/aburatsubo-terrain-data/data/ALL_depth_map_data_202510.csv
+## CSVデータ
 
+**2025年10月**
 
-処理後
+[加工前](https://takamitsu-iida.github.io/aburatsubo-terrain-data/data/ALL_depth_map_data_202510.csv)
 
-https://takamitsu-iida.github.io/aburatsubo-terrain-data/data/ALL_depth_map_data_202510_dd_ol_ip_mf.csv
+[加工後](https://takamitsu-iida.github.io/aburatsubo-terrain-data/data/ALL_depth_map_data_202510_dd_ol_ip_mf.csv)
 
+<br>
 
-3D可視化のライブデモ
+|       |            lat |             lon |        depth |            epoch |
+|:------|---------------:|----------------:|-------------:|-----------------:|
+| count | 164979         | 164979          | 164979       | 164979           |
+| mean  |     35.164     |    139.607      |     17.0116  |      1.59862e+12 |
+| std   |      0.0021361 |      0.00418346 |      9.74208 |      8.38241e+10 |
+| min   |     35.1572    |    139.554      |      1.082   |      1.50491e+12 |
+| 25%   |     35.1628    |    139.604      |      8.899   |      1.51399e+12 |
+| 50%   |     35.1639    |    139.607      |     15.333   |      1.5927e+12  |
+| 75%   |     35.1649    |    139.609      |     24.071   |      1.68696e+12 |
+| max   |     35.1797    |    139.622      |     47.539   |      1.75964e+12 |
+
+<br>
+
+Oldest epoch: 2017-09-08 22:08:11
+
+Newest epoch: 2025-10-05 04:19:12
+
+<br><br>
+
+## 3D可視化
+
+Deeperのサブスクリプション会員になると3Dでマップが表示されるみたいですが、契約していませんので、可視化ツールを自作します。
+
+[Live Demo](https://takamitsu-iida.github.io/aburatsubo-terrain-data/index-bathymetric-data.html)
+
+[Live Demo (dev)](https://takamitsu-iida.github.io/aburatsubo-terrain-data/index-bathymetric-data-dev.html)
 
 [![ScreenImage](/assets/3d-visualization.png)](https://takamitsu-iida.github.io/aburatsubo-terrain-data/index-bathymetric-data.html)
 
-https://takamitsu-iida.github.io/aburatsubo-terrain-data/index-bathymetric-data.html
-
-
-<br>
+<br><br>
 
 ## CSVファイルの概要
 
 2025年10月 データのサイズは約6.5MB
 
-各行は `lat, lon, depth, unix_time_in_msec` の情報で構成されている。
+各行は `lat, lon, depth, unix_time_in_msec` の情報で構成されています。
 
-先頭の3行
+先頭の3行はこのようになっています。
 
 ```text
 35.162872,139.61423,2.747,1659737621643
@@ -37,12 +61,13 @@ https://takamitsu-iida.github.io/aburatsubo-terrain-data/index-bathymetric-data.
 35.162903,139.61421,2.987,1659737624655
 ```
 
-緯度(lat)の分解能は小数点以下6桁。経度(lon)の分解能は小数点以下5桁。
-概ね1m程度の分解能になっている。
+緯度(lat)の分解能は小数点以下6桁、経度(lon)の分解能は小数点以下5桁になっています。
 
-1行目のUNIX時間1659737621643は2022年8月6日7時13分41.643秒を表している。
-2行目のUNIX時間との差は約2秒。
-ということはDeeperは2秒に一度、スキャンしていることになる。
+これは概ね1m程度の分解能ということになります。
+
+1行目のUNIX時間と2行目のUNIX時間との差は約2秒です。
+
+水深のスキャンが2秒に一度、というわけではなく、CSVデータとして取得するときには2秒間隔に丸めているようです。
 
 CSVファイルの最後の3行
 
@@ -52,71 +77,129 @@ CSVファイルの最後の3行
 35.16162,139.60031,32.39,0
 ```
 
-古いデータはUNIX時間が欠落していて0になっている。
-概ね2017年よりも古いデータはUNIX時間が欠落している模様。
+古いデータはUNIX時間が欠落していて0になっています。
 
-緯度方向の分解能も低くなっている。これは初代Deeperと現行機種との差かも。
+概ね2017年よりも古いデータはUNIX時間が欠落している模様です。
 
-古いデータはdropしてもいいけど、今回はそのまま利用する。
+緯度(lat)方向の分解能も低くなっています。これは初代Deeperと現行機種との差かもしれません。
 
-CSVファイルをpandasで読み取った時点での統計値。行数は約16万。
+古いデータはdropした方が良さそうです。
 
-|       |            lat |             lon |        depth |
-|:------|---------------:|----------------:|-------------:|
-| count | 164979         | 164979          | 164979       |
-| mean  |     35.164     |    139.607      |     17.0116  |
-| std   |      0.0021361 |      0.00418346 |      9.74208 |
-| min   |     35.1572    |    139.554      |      1.082   |
-| 25%   |     35.1628    |    139.604      |      8.899   |
-| 50%   |     35.1639    |    139.607      |     15.333   |
-| 75%   |     35.1649    |    139.609      |     24.071   |
-| max   |     35.1797    |    139.622      |     47.539   |
+<br><br><br>
 
+# データ加工処理
 
-GPS座標(lat, lon)が重複したデータも多くある。
+<br>
 
-座標が重複した部分はgroupbyで集約して水深の平均値を算出し、重複行を削除したあと、集約したものを加える。
+水深は手漕ぎボートで移動した軌跡しか探知できませんので、(lat, lon)を可視化すると線状になります。
 
-重複を排除した状態の散布図。明らかな異常値が存在する。
-
-![deduplicated data](/assets/ALL_depth_map_data_dd.png)
-
-Local Outlier Factor（局所外れ値因子法）を使ってこれら異常値を取り除いた状態の散布図。
-
-![drop outlier](/assets/ALL_depth_map_data_dd_ol.png)
-
-重複を削除、異常値を削除した状態でのdescribe()はこの通り。元データが約16万行だったのに対して、約10万行に削減。
-
-|       |             lat |             lon |        depth |
-|:------|----------------:|----------------:|-------------:|
-| count | 105667          | 105667          | 105667       |
-| mean  |     35.164      |    139.608      |     16.8435  |
-| std   |      0.00232685 |      0.00442741 |      9.99635 |
-| min   |     35.1572     |    139.597      |      1.249   |
-| 25%   |     35.1627     |    139.604      |      8.534   |
-| 50%   |     35.1639     |    139.607      |     15.169   |
-| 75%   |     35.1649     |    139.61       |     22.646   |
-| max   |     35.1737     |    139.622      |     47.539   |
-
-異常値は水深にもある。これを取り除くのは難しい。海底の根も消えてしまうので、加減が必要。
+そのままだと3次元での可視化が難しいので、加工します。
 
 <br><br>
 
-## 環境構築
+## 重複排除
 
-binディレクトリにスクリプトを配置。
+GPS座標(lat, lon)が重複したデータも多くありますので、まずは重複を排除します。
 
-testsディレクトリにテスト用スクリプトを配置。
+座標が重複した部分は水深の平均値を算出して置き換えます。
 
-binディレクトリにあるスクリプトを外部からimportするにはPYTHONPATHの設定が必要。
+この処理はPandasを使うと1行で処理できます。
 
-vscodeは .env ファイルがあればそれを読み取るので、以下のように設定する。
+```python
+df_uniq = df.groupby(['lat', 'lon'], as_index=False).agg({'depth': 'mean', 'epoch': 'max'})
+```
+
+重複排除前が164979件に対して、排除後は106424件になりますので、重複数は58555件ということになります。
+
+全データの35%が重複したデータです。
+
+ボートの軌跡を時系列でアニメーション表示するなら重複したデータも大事ですが、今は海底地形を可視化したいだけなので、単純に排除します。
+
+<br><br>
+
+## 異常値排除
+
+重複を排除した状態の散布図です。明らかに異常値が存在します。
+
+![deduplicated data](/assets/ALL_depth_map_data_dd.png)
+
+このような異常値の排除は、Local Outlier Factor（局所外れ値因子法）もしくはIsolation Forestを使うことで取り除けます。
+
+sklearnを使えば簡単に処理できます。
+
+ここではLOFを使います。LOFでは近傍点の数をパラメータとして指定しますが、デフォルトのまま20としています。
+
+```python
+def local_outlier_factor(df: pd.DataFrame, n_neighbors: int = 20, features: list = ["lat", "lon"]) -> pd.DataFrame:
+    """Local Outlier Factor (LOF)を使用して外れ値を検出し、除去したデータフレームを返す関数。
+
+    Args:
+        df (pd.DataFrame): 入力データフレーム。'lat'および'lon'列を含む必要があります。
+        n_neighbors (int, optional): 近傍点の数. デフォルトは20.
+        features (list, optional): 使用する特徴量のリスト. デフォルトは["lat", "lon"].
+
+    Returns:
+    """
+
+    # n_neighborsはデータ数が数百件以下のような少ない場合は5～10が推奨され、
+    # 数千件以上のような多い場合は20～50が推奨される。
+    # scikit-learnのデフォルトは20
+    # https://scikit-learn.org/stable/modules/generated/sklearn.neighbors.LocalOutlierFactor.html
+
+    # LOFモデルの作成と適合
+    lof = LocalOutlierFactor(n_neighbors=n_neighbors)
+
+    # 特徴量を指定してデータを抽出（デフォルトは緯度と経度）
+    X = df[features]
+
+    # 学習させる
+    lof.fit(X)
+
+    # 予測を行う
+    # 各サンプルの予測結果。1は正常、-1は外れ値を示す。
+    predicted: np.ndarray = lof.fit_predict(X)
+
+    # 外れ値を除去したデータフレームに置き換える
+    df = df[predicted == 1].reset_index(drop=True)
+
+    # 結果を返す
+    return df
+```
+
+異常値を取り除いた状態の散布図です。
+
+![drop outlier](/assets/ALL_depth_map_data_dd_ol.png)
+
+CSVデータには位置の異常値だけでなく、水深の異常値もあるのですが、これを機械的に取り除くには調整が難しいため、今回は適用していません。
+
+一番欲しい情報である、海底の根の情報が消えてしまうためです。
+
+<br><br>
+
+## 集約処理
+
+手漕ぎボートで海に浮かぶときには、移動中に採取したところは線状になり、アンカーを下ろして釣りをしているときのデータは点群になります。
+
+密度が濃すぎるところは間引きをして、密度が薄いところは3次元加工に適したように補間が必要です。
+
+
+<br><br>
+
+## 実行環境
+
+binディレクトリにPythonスクリプトを配置します
+
+testsディレクトリにはテスト用スクリプトを配置します。
+
+binディレクトリにあるスクリプトを異なる場所（たとえばtestsディレクトリ）からimportするにはPYTHONPATHの設定が必要になります。
+
+vscodeは .env ファイルがあればそれを自動で読み取るので、以下のように設定します。
 
 ```bash
 PYTHONPATH=bin
 ```
 
-venvで仮想環境を整える。
+あとはvenvで仮想環境を整えます。
 
 ```bash
 python3 -m venv .venv
@@ -124,27 +207,28 @@ pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
+direnvを導入しておくと楽になりますので、aptで入れておきます。
+
+<br><br><br>
+
+# 自分用作業メモ
+
+<br>
+
+やり方をすぐ忘れてしまうのでメモ。
+
 <br><br>
 
-## CSVデータ
+# CSVデータのダウンロード
 
-Deeperの地図アプリからCSV形式でデータをダウンロードする。
+Deeperの地図サイトからCSV形式でデータをダウンロードします。
 
 https://maps.fishdeeper.com/ja-jp
 
-~~ファイル名は共通で `bathymetry_data.csv` となっている。~~
 
-ファイル名は共通で `depth_map_data.csv` となっている。
+~~ファイル名は共通で `bathymetry_data.csv` となっています。~~
 
-<br>
-
-> [!NOTE]
->
-> 2024年8月追記。
->
-> Deeperの仕様が変わって、ハンバーガーメニューからダウンロードを選択すると、depth_map_data.csvというファイルが取得できる。
->
-> 仕様変更前にダウンロードしたファイルは `./data/bathymetry_data.csv` として残してある。
+ファイル名は共通で `depth_map_data.csv` となっています。
 
 <br>
 
@@ -152,25 +236,36 @@ https://maps.fishdeeper.com/ja-jp
 >
 > 2024年8月追記。
 >
-> 2017年9月よりも古いデータは参考にならないと判断してクラウドから削除。
+> Deeperの仕様が変わって、ハンバーガーメニューからダウンロードを選択すると、depth_map_data.csvというファイルが取得できます。
 >
-> なぜか重複して登録されているデータもクラウドから削除。
+> 仕様変更前にダウンロードしたファイルは `./data/bathymetry_data.csv` として残してあります。
 
 <br>
 
 > [!NOTE]
 >
-> 水深データの一括ダウンロードは大変重たい処理のようで、長い時間かかるため失敗することが多い。
-> 感覚的には10回に1回くらいしか成功しない。
-> 釣行ごとの水深データを落として結合したほうがいいかもしれない。
+> 2024年8月追記。
+>
+> 2017年9月よりも古いデータは参考にならないと判断してクラウドから削除しました。
+
+<br>
+
+> [!NOTE]
+>
+> 水深データの一括ダウンロードは大変重たい処理のようで、長い時間かかるため失敗することが多いです。
+>
+> 感覚的には10回に1回くらいしか成功しません。
+>
+> 釣行ごとの水深データを落として、自分で結合したほうがいいかもしれません。
+
 
 <br><br>
 
-## 自分用作業メモ
+## データ加工処理
 
-中間ファイルを作りながら、順番に処理していく。
+中間ファイルを作りながら、順番に処理していきます。
 
-処理の順番を忘れてしまうのと、中間ファイルの名前を手打ちしたくないので、makeで処理する。
+処理の順番を忘れてしまうのと、中間ファイルの名前を手打ちしたくないので、makeで処理します。
 
 ```bash
 $ make
@@ -183,12 +278,13 @@ scatter                        散布図を作成する
 clean                          データファイルを削除する
 ```
 
-新しいCSVデータを入手したら、そのファイル名をMakefileに記述してから `make all` する。
+新しいCSVデータを入手したら、そのファイル名をMakefileに記述してから `make all` します。
 
-最終的には `./static/data/processed_data.csv` が生成される。
+最終的には `./static/data/bathymetric_data.csv` が生成されます。
 
-それを3Dで可視化するのに index-processed-data.html を使う。
+それを3Dで可視化するには index-bathymetric-data.html を使います。
 
+HTMLファイルをvscodeで右クリックすれば即座に確認できます。
 
 **TODO:**
 
@@ -199,13 +295,30 @@ clean                          データファイルを削除する
 
 ## 座標系メモ
 
-latとlon、どっちが緯度でどっちが経度かすぐにわからなくなる。
+latとlon、どっちが緯度でどっちが経度かすぐにわからなくなってしまいます。
 
 <dl>
 <dt>latitude</dt> <dd>緯度</dd>
 <dt>longitude</dt> <dd>経度</dd>
-<dt>地球の半径</dt> <dd>6378.137 km 測地測量の基準としての半径</dd>
 </dl>
+
+Deeperからダウンロードしたデータは(lat, lon, depth)の順になっています。
+
+Three.jsで可視化するときには、X軸をlon, Z軸をlat、Y軸にdepthを対応させています。
+
+```text
+    Y(depth)
+    ↑
+    |
+    +------>X(lon)
+   /
+  /
+ Z(lat)
+```
+
+XZ平面に地図を描画して、Y軸のマイナス方向が深さになるようにしています。
+
+とてつもなくややこしいです。
 
 <br><br>
 
