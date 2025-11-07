@@ -4,6 +4,8 @@
 
 手漕ぎボートで油壷の海に浮かんだときの水深データです。
 
+魚群探知機Deeperを使って採取したものです。
+
 <br><br>
 
 ## CSVデータ
@@ -37,7 +39,10 @@ Newest epoch: 2025-10-05 04:19:12
 
 ## 3D可視化
 
-Deeperのサブスクリプション会員になると3Dでマップが表示されるみたいですが、契約していませんので、可視化ツールを自作します。
+Deeperのサブスクリプション会員になると3Dでマップが表示されるみたいですが、
+契約していませんので、可視化ツールを自作しました。
+
+油壷専用です。
 
 [Live Demo](https://takamitsu-iida.github.io/aburatsubo-terrain-data/index-bathymetric-data.html)
 
@@ -594,3 +599,30 @@ nohup jupyter-notebook --config $CURRENT_DIR/jupyter_notebook_config.py --notebo
 echo "Jupyter Notebook started. Check log/jupyter.log for details."
 echo "You can access the notebook at http://localhost:8888"
 ```
+
+
+<br><br>
+
+## 3D可視化
+
+Three.jsで可視化します。
+
+Three.jsでの可視化の例はここにまとめました。
+
+https://github.com/takamitsu-iida/threejs-practice
+
+<br>
+
+点群をメッシュ化するアルゴリズムはドロネー図を使っています。
+
+JavaScriptではdelaunatorjsを使っています。
+
+<br>
+
+> [!NOTE]
+>
+> Wikipediaを見たら **ドロネー図** と書かれていました。
+>
+> 長い間、デローネ三角形と呼んでました（恥）
+
+<br>

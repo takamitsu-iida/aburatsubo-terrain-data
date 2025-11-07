@@ -6,7 +6,7 @@ import { CSS2DRenderer, CSS2DObject } from 'three/libs/CSS2DRenderer.js';
 
 Pythonでデータを集約しているので、JavaScript側ではそのまま利用します。
 
-デローネ三角形でメッシュを生成します。
+ドロネー三角形でメッシュを生成して可視化します。
 
 */
 
@@ -16,7 +16,7 @@ import { GUI } from "three/libs/lil-gui.module.min.js";
 // stats.js
 import Stats from "three/libs/stats.module.js";
 
-// デローネ三角形
+// ドロネー三角形
 import Delaunator from "delaunatorjs";
 
 /*
@@ -195,7 +195,7 @@ export class Main {
     // stats.jsを表示する？
     showStats: true,
 
-    // デローネ三角形のフィルタリングパラメータ
+    // ドロネー三角形のフィルタリングパラメータ
     enableDelaunayFilter: true,
     maxTriangleEdgeLength: 20,  // エッジの最大長さ 画面サイズxzGridSizeが200の場合の初期値
   }
@@ -333,7 +333,7 @@ export class Main {
     // 全てを削除した状態で描画
     this.renderer.render(this.scene, this.camera);
 
-    // CSVデータをデローネ三角形でメッシュ化する
+    // CSVデータをドロネー三角形でメッシュ化する
     this.initDelaunayFromCsv();
 
     // topojsonデータから地図のシェイプを作成
@@ -758,8 +758,8 @@ export class Main {
       .add(displayParams, 'scale')
       .name(navigator.language.startsWith("ja") ? "縮尺表示" : "Show scale");
 
-    // デローネ三角形フィルタフォルダ
-    const delaunayFolder = gui.addFolder(navigator.language.startsWith("ja") ? "デローネフィルタ" : "Delaunay Filter");
+    // ドロネー三角形に関するフィルタ処理
+    const delaunayFolder = gui.addFolder(navigator.language.startsWith("ja") ? "ドロネー三角形" : "Delaunay Filter");
 
     delaunayFolder
       .add(this.params, "enableDelaunayFilter")
@@ -938,7 +938,7 @@ export class Main {
   }
 
 
-  // CSVデータを使ってデローネ三角形でメッシュ化する
+  // CSVデータを使ってドロネー三角形でメッシュ化する
   initDelaunayFromCsv = () => {
 
     // 作成するポイントクラウドのリスト
@@ -953,7 +953,7 @@ export class Main {
     // dataをクラスタごとに分解する
     const clusteredData = this.splitPointsByCluster(data);
 
-    // クラスタごとにデローネ三角形でメッシュを作成
+    // クラスタごとにドロネー三角形でメッシュを作成
     clusteredData.forEach(cluster => {
 
       // Three.jsのVector3配列を作成して、データを格納する
