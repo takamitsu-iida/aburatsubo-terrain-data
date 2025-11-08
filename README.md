@@ -48,6 +48,10 @@ Newest epoch: 2025-10-05 04:19:12
 
 ## 3D Visualization (my own 3d map)
 
+I created a custom 3d visualization tool. It's specifically for Aburatsubo in Kanagawa JAPAN.
+
+<br>
+
 [Live Demo](https://takamitsu-iida.github.io/aburatsubo-terrain-data/index-bathymetric-data.html)
 
 [Live Demo (dev)](https://takamitsu-iida.github.io/aburatsubo-terrain-data/index-bathymetric-data-dev.html)
