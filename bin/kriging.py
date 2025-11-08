@@ -6,12 +6,9 @@
 # 標準ライブラリのインポート
 #
 import logging
-import math
 import os
 import sys
-
 from pathlib import Path
-from typing import List, Tuple, Optional, Dict, Any
 
 # WSL1 固有の numpy 警告を抑制
 # https://github.com/numpy/numpy/issues/18900
@@ -297,7 +294,7 @@ if __name__ == '__main__':
         visualize_all_kriged_df(kriged_dfs, image_dir, filename="kriging_interpolated_depth_all.png")
 
         # CSVファイルとして保存
-        output_csv_path = app_home.joinpath("static").joinpath("data").joinpath("kriging_data.csv")
+        output_csv_path = data_dir.joinpath("kriging_data.csv")
         save_kriged_df_to_csv(kriged_dfs, output_csv_path)
 
     #

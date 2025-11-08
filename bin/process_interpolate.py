@@ -2,8 +2,7 @@
 # -*- coding: utf-8 -*-
 
 """
-DeeperのGPSデータを入力として受け取り、補間処理を行うスクリプトです。
-
+DeeperのGPSデータを入力として受け取り、集約と補間処理を行うスクリプトです。
 
 """
 
@@ -29,12 +28,7 @@ warnings.filterwarnings(action="ignore", category=UserWarning, module=r"numpy.*"
 # 外部ライブラリのインポート
 #
 try:
-    import pandas as pd
-    import matplotlib.pyplot as plt
-
     import numpy as np
-    from pykrige.ok import OrdinaryKriging
-    from scipy.interpolate import griddata
 except ImportError as e:
     print(f"必要なライブラリがインストールされていません: {e}")
     sys.exit(1)
@@ -43,7 +37,7 @@ except ImportError as e:
 # ローカルファイルからインポート
 #
 try:
-    from load_save_csv import load_csv, save_points_as_csv
+    from load_save_csv import load_csv
     from qtree import Quadtree, create_quadtree_from_df
 except ImportError as e:
     logging.error(f"module import error: {e}")
@@ -121,126 +115,6 @@ logger.addHandler(file_handler)
 #
 
 
-def __process_kriging(df: pd.DataFrame):
-
-    N_TILES_PER_SIDE = 5 # 1辺あたりのタイル数 (合計 5x5 = 25領域に分割)
-
-    # 全体の範囲を計算
-    lon_min, lon_max = df['lon'].min(), df['lon'].max()
-    lat_min, lat_max = df['lat'].min(), df['lat'].max()
-
-    # 領域の境界を定義
-    lon_bins = np.linspace(lon_min, lon_max, N_TILES_PER_SIDE + 1)
-    lat_bins = np.linspace(lat_min, lat_max, N_TILES_PER_SIDE + 1)
-
-    # 結果格納用のリスト
-    interpolated_results = []
-    all_grid_coords = [] # 補間した格子点の座標を結合するために使用
-
-    print("\n--- 領域ごとのクリギング処理を開始 ---")
-
-    for i in range(N_TILES_PER_SIDE):
-        for j in range(N_TILES_PER_SIDE):
-            # 領域 (タイル) の境界
-            current_lon_min, current_lon_max = lon_bins[i], lon_bins[i+1]
-            current_lat_min, current_lat_max = lat_bins[j], lat_bins[j+1]
-
-            # 該当領域のデータ点を抽出
-            tile_data = df[
-                (df['lon'] >= current_lon_min) & (df['lon'] < current_lon_max) &
-                (df['lat'] >= current_lat_min) & (df['lat'] < current_lat_max)
-            ].copy()
-
-            if len(tile_data) < 4:
-                # クリギングに必要な最低限の点数（通常は3点以上）がない場合はスキップ
-                # または、単純な補間（例: 平均値）で埋める
-                # print(f"領域 ({i}, {j}) はデータ点数が少なすぎます ({len(tile_data)}点)。スキップします。")
-                continue
-
-            lon_tile, lat_tile, depth_tile = tile_data['lon'].values, tile_data['lat'].values, tile_data['depth'].values
-            print(f"処理中: 領域 ({i}, {j}), データ点数: {len(tile_data)}")
-
-            # 3-1. クリギングモデルの構築
-            # 異方性の設定は、必要に応じてここに追加します
-            try:
-                OK = OrdinaryKriging(
-                    lon_tile, lat_tile, depth_tile,
-                    variogram_model='spherical',
-                    verbose=False,
-                    enable_plotting=False
-                )
-
-                # 3-2. 補間するグリッドの定義
-                # 各領域で均一なメッシュを作成 (例: 20x20)
-                GRID_POINTS = 20
-                tile_grid_lon = np.linspace(current_lon_min, current_lon_max, GRID_POINTS)
-                tile_grid_lat = np.linspace(current_lat_min, current_lat_max, GRID_POINTS)
-
-                # 3-3. 補間の実行
-                z_tile, ss_tile = OK.execute('grid', tile_grid_lon, tile_grid_lat)
-
-                # 結果を DataFrame に格納
-                tile_grid_x, tile_grid_y = np.meshgrid(tile_grid_lon, tile_grid_lat)
-
-                # 緯度・経度と補間結果を結合してリストに追加
-                interpolated_results.append(pd.DataFrame({
-                    'lon': tile_grid_x.ravel(),
-                    'lat': tile_grid_y.ravel(),
-                    'depth_kriging': z_tile[0].ravel()
-                }))
-
-            except Exception as e:
-                print(f"領域 ({i}, {j}) でクリギングエラーが発生しました: {e}")
-                pass # エラーが発生した領域はスキップまたは単純補間で処理
-
-    # ----------------------------------------------------
-    # 4. 結果の結合
-    # ----------------------------------------------------
-    if interpolated_results:
-        final_result_df = pd.concat(interpolated_results).drop_duplicates(subset=['lon', 'lat']).reset_index(drop=True)
-        print("\n--- 補間結果の結合が完了しました ---")
-        print(f"最終グリッドデータ件数: {len(final_result_df)}")
-
-        # 可視化の準備
-        # griddataを使って、結合された不規則な点を規則的なグリッドに再補間（表示用）
-        # ただし、クリギングで得た値の精度が落ちるため、本来はクリギングの結果をそのまま利用すべき
-
-        # 最終的なメッシュの作成 (可視化用)
-        VIS_POINTS = 100
-        vis_lon = np.linspace(lon_min, lon_max, VIS_POINTS)
-        vis_lat = np.linspace(lat_min, lat_max, VIS_POINTS)
-
-        # griddata（線形補間）で最終結果を可視化用のメッシュに変換
-        # 注意: ここは表示の滑らかさを得るためであり、クリギングの結果が最良です
-        final_depth_grid = griddata(
-            final_result_df[['lon', 'lat']].values,
-            final_result_df['depth_kriging'].values,
-            (vis_lon[None,:], vis_lat[:,None]),
-            method='linear'
-        )
-
-        # 5. 可視化
-        plt.figure(figsize=(10, 8))
-        plt.title("Tiled Kriging Interpolation Map")
-
-        im = plt.contourf(vis_lon, vis_lat, final_depth_grid, levels=50, cmap='viridis')
-        plt.colorbar(im, label='Interpolated Depth')
-
-        plt.xlabel("Longitude")
-        plt.ylabel("Latitude")
-        plt.show()
-    else:
-        print("\n補間可能なデータ領域がありませんでした。")
-
-
-def aggregate_leaf_nodes(quadtree: Quadtree):
-    # 最も深いノードについては、そのノード内のポイントの平均値に置き換える
-    deepest_level = quadtree.get_deepest_level()
-    nodes = [node for node in quadtree.get_leaf_nodes() if node.level == deepest_level and len(node.points) > 1]
-    for node in nodes:
-        avg_point = node.average()
-        node.points = [avg_point]
-
 # データ補間
 # ポイントのない葉ノードについては、隣接ノードに値があればその平均値で埋める
 def interpolate_empty_leaf_nodes(quadtree: Quadtree):
@@ -271,10 +145,12 @@ def interpolate_empty_leaf_nodes(quadtree: Quadtree):
         ]
 
         # 8方向の隣接ノードを取得
+        node_count = 0
         for d_lat, d_lon in directions:
             neighbor_node = quadtree.get_leaf_node_by_point(d_lat, d_lon)
             if neighbor_node and len(neighbor_node.points) > 0:
                 neighbor_points.extend(neighbor_node.points)
+                node_count += 1
 
         # 平均値で埋める
         #if len(neighbor_points) > 3:
@@ -282,7 +158,7 @@ def interpolate_empty_leaf_nodes(quadtree: Quadtree):
         #  node.points.append({'lat': avg_lat, 'lon': avg_lon, 'depth': avg_depth})
 
         # IDW補間 (inverse distance weighted algorithm)
-        if len(neighbor_points) > 3:
+        if node_count > 2 and len(neighbor_points) > 3:
             avg_lat, avg_lon, avg_depth = idw_interpolate_value(mid_lat, mid_lon, neighbor_points)
             node.points.append({'lat': avg_lat, 'lon': avg_lon, 'depth': avg_depth, 'epoch': 0})
 
@@ -367,40 +243,75 @@ if __name__ == '__main__':
             logger.error(f"CSVファイルの読み込みに失敗しました: {input_file_path}")
             return
 
-        # 四分木を初期化
-        quadtree = create_quadtree_from_df(df)
+        # STEP1
+        # 細かい領域で四分木を作成して、データを集約する
 
-        # 四分木の統計情報を表示する
+        # 四分木を作成
+        Quadtree.MAX_POINTS = 3        # デフォルトは6
+        Quadtree.MIN_GRID_WIDTH = 2.0  # デフォルトは2.0メートル
+        quadtree = create_quadtree_from_df(df)
+        # 四分木の統計情報を表示
         logger.info(f"Initial Quadtree stats\n{quadtree.get_stats_text()}\n")
 
-        # データ集約
-        # 最も深いノードについては、そのノード内のポイントの平均値に置き換えることでデータを減らす
-        aggregate_leaf_nodes(quadtree)
+        # 最も深いレベルにあるリーフノードのポイントを平均化して集約
+        quadtree.aggregate_deepest_node_points()
+        logger.info("Aggregated deepest node points.")
+        logger.info(f"Post-aggregation Quadtree stats\n{quadtree.get_stats_text()}\n")
 
-        # 集約後の四分木の統計情報を表示する
-        logger.info(f"Aggregated Quadtree stats\n{quadtree.get_stats_text()}\n")
 
-        # データ補間
-        # ポイントのない葉ノードについては、隣接ノードに値があればその平均値で埋める
+        # STEP2
+        # 空白の葉ノードについては、3個以上の隣接ノードに値があれば補間して埋める
+
         interpolate_empty_leaf_nodes(quadtree)
 
-        # 補間した四分木の統計情報を表示する
-        logger.info(f"Extended Quadtree stats\n{quadtree.get_stats_text()}\n")
+        # STEP3
+        # 大きめの領域で四分木を作成して、密度の薄いノードを対象に補間する
+        Quadtree.MAX_POINTS = 6         # デフォルトは6
+        Quadtree.MIN_GRID_WIDTH = 20.0  # 10～20mの領域に収まる
+        quadtree.rebuild()
+        logger.info(f"Rebuilt Quadtree stats\n{quadtree.get_stats_text()}\n")
 
-        # 点群をファイルに保存する
-        points = []
-        for node in quadtree.get_leaf_nodes():
-            points.extend(node.points)
-        logger.info(f"Points count: {len(points)}")
+        # 最も深いレベルを除く、ポイントを持つ全てのリーフノードを取得
+        non_deepest_nodes = [
+            node for node in quadtree.get_nonempty_leaf_nodes()
+            if node.level < quadtree.get_deepest_level()
+        ]
+        logger.info(f"Interpolating {len(non_deepest_nodes)} non-deepest leaf nodes...")
 
-        # CSVファイルに保存する
-        save_points_as_csv(points, output_file_path)
+        # これらノードが持つポイントを取り出して、N, W, E, Sの4点を追加して補間する
+        # 4m四方の領域を考慮する
+        directions = [[0.0, 4.0], [4.0, 0.0], [0.0, -4.0], [-4.0, 0.0]]  # 北、東、南、西
+        for node in non_deepest_nodes:
+            for point in node.points:
+                lat = point['lat']
+                lon = point['lon']
+                # 4方向に4m移動した点を追加、深さはその点の値を使う
+                for d in directions:
+                    new_lat = lat + d[0] * quadtree.lat_per_meter
+                    new_lon = lon + d[1] * quadtree.lon_per_meter
+                    new_point = {'lat': new_lat, 'lon': new_lon, 'depth': point['depth'], 'epoch': 0}
+                    quadtree.insert(new_point)
+        logger.info("Inserted N, E, S, W points for interpolation.")
+        logger.info(f"Post-insertion Quadtree stats\n{quadtree.get_stats_text()}\n")
+
+
+        # STEP4
+        # ポイントが増えたので、もう一度細かい領域で四分木を作成して、データを集約する
+
+        Quadtree.MAX_POINTS = 3        # デフォルトは6
+        Quadtree.MIN_GRID_WIDTH = 2.0  # デフォルトは2.0メートル
+        quadtree.rebuild()
+
+        # 最も深いレベルにあるリーフノードのポイントを平均化して集約
+        quadtree.aggregate_deepest_node_points()
+        logger.info("Aggregated deepest node points.")
+        logger.info(f"Post-aggregation Quadtree stats\n{quadtree.get_stats_text()}\n")
+
+
+        # 点群をCSVファイルに保存する
+        quadtree.save_to_csv(output_file_path)
         logger.info(f"Points data saved to: {output_file_path}")
 
-        # 四分木の可視化画像を保存する
-        #output_image_filename = f"{input_file_path.stem}_qtree.png"
-        #output_image_path = image_dir.joinpath(output_image_filename)
-        #save_quadtree_image(quadtree=quadtree, filename=output_image_path, draw_points=False)
 
     #
     # 実行

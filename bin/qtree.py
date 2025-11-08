@@ -272,7 +272,7 @@ class QuadtreeNode:
         avg_lat = sum(p['lat'] for p in points) / n
         avg_lon = sum(p['lon'] for p in points) / n
         avg_depth = sum(p['depth'] for p in points) / n
-        return {'lat': avg_lat, 'lon': avg_lon, 'depth': avg_depth}
+        return {'lat': avg_lat, 'lon': avg_lon, 'depth': avg_depth, 'epoch': 0}
 
 
 class Quadtree:
@@ -454,17 +454,21 @@ class Quadtree:
         leaf_nodes = self.get_leaf_nodes()
 
         with open(filepath, mode='w', newline='', encoding='utf-8') as csvfile:
-            fieldnames = ['lat', 'lon', 'depth']
+            fieldnames = ['lat', 'lon', 'depth', 'epoch']
             writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
 
-            writer.writeheader()
+            # ヘッダ行は書かない
+            # writer.writeheader()
+
             for node in leaf_nodes:
                 for point in node.points:
                     writer.writerow({
                         'lat': point['lat'],
                         'lon': point['lon'],
-                        'depth': point['depth']
+                        'depth': point['depth'],
+                        'epoch': point.get('epoch', 0)
                     })
+
         logger.info(f"Quadtree data saved to CSV: {filepath}")
 
 
@@ -491,7 +495,6 @@ class Quadtree:
         for node in nodes:
             avg_point = node.average()
             node.points = [avg_point]
-
 
 
 def get_latlon_delta(lat: float, lon: float, meters: float = 1.0) -> tuple[float, float]:
@@ -698,7 +701,7 @@ if __name__ == '__main__':
                 for d in directions:
                     new_lat = lat + d[0] * quadtree.lat_per_meter
                     new_lon = lon + d[1] * quadtree.lon_per_meter
-                    new_point = {'lat': new_lat, 'lon': new_lon, 'depth': point['depth']}
+                    new_point = {'lat': new_lat, 'lon': new_lon, 'depth': point['depth'], 'epoch': 0}
                     quadtree.insert(new_point)
         logger.info("Inserted N, E, S, W points for interpolation.")
         logger.info(f"Post-insertion Quadtree stats\n{quadtree.get_stats_text()}\n")
@@ -718,7 +721,7 @@ if __name__ == '__main__':
 
         # CSVとして保存する
         output_filename = "quadtree_data.csv"
-        output_filepath = app_home.joinpath("static", "data", output_filename)
+        output_filepath = data_dir.joinpath(output_filename)
         quadtree.save_to_csv(output_filepath)
 
         # イメージ保存

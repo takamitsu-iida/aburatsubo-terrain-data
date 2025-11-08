@@ -323,17 +323,17 @@
         { lon: 139.61595853, lat: 35.15950000, depth: 0, name_ja: '油壷湾', name: 'Aburatsubo' },
       ];
 
+      const currentDataset = 'quadtree_data';
       const availableDatasets = {
-          'bathymetric_data': './static/data/bathymetric_data.csv',
-          'quadtree_data': './static/data/quadtree_data.csv',
-          'kriging_data': './static/data/kriging_data.csv',
+          'quadtree_data': './data/quadtree_data.csv',
+          'kriging_data': './data/kriging_data.csv',
+          'dd_ol_ip': './data/ALL_depth_map_data_202510_dd_ol_ip.csv',
+          'dd_ol_ip_mf': './data/ALL_depth_map_data_202510_dd_ol_ip_mf.csv'
       };
 
       const params = {
         // データセット
-        currentDataset: 'quadtree_data',
-        // currentDataset: 'bathymetric_data',
-        // currentDataset: 'kriging_data',
+        currentDataset: currentDataset,
         availableDatasets: availableDatasets,
         landmarks: landmarks,  // default []
         guiClosed: false,  // GUIをクローズド状態で開始する

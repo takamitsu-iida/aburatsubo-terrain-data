@@ -6,12 +6,10 @@
 # 標準ライブラリのインポート
 #
 import logging
-import math
 import os
 import sys
 
 from pathlib import Path
-from typing import List, Tuple, Optional, Dict, Any
 
 # WSL1 固有の numpy 警告を抑制
 # https://github.com/numpy/numpy/issues/18900
