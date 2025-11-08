@@ -4,6 +4,13 @@
 
 [README in Japanese](/README.ja.md)
 
+<br>
+
+These are water depth data collected while floating on the sea in Aburatsubo in a rowboat.
+
+The data was collected using a [Deeper](https://deepersonar.com/en-all) fish finder.
+
+
 <br><br>
 
 ## CSV data
