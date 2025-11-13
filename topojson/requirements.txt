@@ -1,0 +1,4 @@
+# Note: required packages for the topojson/extract.py script.
+shapely
+pyproj
+matplotlib

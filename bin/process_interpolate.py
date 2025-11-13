@@ -14,7 +14,6 @@ SCRIPT_DESCRIPTION = 'Interpolate Deeper GPS data using Quadtree'
 #
 import argparse
 import logging
-import os
 import sys
 
 from pathlib import Path
@@ -105,7 +104,7 @@ stdout_handler.setLevel(logging.INFO)
 logger.addHandler(stdout_handler)
 
 # ログファイルのハンドラ
-file_handler = logging.FileHandler(os.path.join(log_dir, log_file), 'a+')
+file_handler = logging.FileHandler(log_dir.joinpath(log_file), 'a+', encoding='utf-8')
 file_handler.setFormatter(formatter)
 file_handler.setLevel(logging.INFO)
 logger.addHandler(file_handler)
