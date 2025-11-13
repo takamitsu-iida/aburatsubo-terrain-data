@@ -116,6 +116,12 @@ export class Main {
     // 現在選択されているデータセット名
     currentDataset: 'bathymetric_data',
 
+    // 海岸線のデータを加えるか？
+    showCoastLine: true,
+
+    // 海岸線のデータ
+    coastLineDataset: './static/data/coastline.csv',
+
     // ファイルをローディングしている状態かどうか
     isLoading: false,
 
@@ -355,7 +361,6 @@ export class Main {
     this.render();
   }
 
-
   // pathで指定されたCSVファイルを取得してパースする
   loadCsv = async (path) => {
     try {
@@ -365,7 +370,19 @@ export class Main {
       }
 
       // テキストデータを取得
-      const text = await response.text();
+      let text = await response.text();
+
+      // 海岸線データを取得する
+      if (this.params.showCoastLine) {
+        const coastLineResponse = await fetch(this.params.coastLineDataset);
+        if (!coastLineResponse.ok) {
+          throw new Error(`HTTP status: ${coastLineResponse.status}`);
+        }
+        const coastLineText = await coastLineResponse.text();
+
+        // 既存のテキストデータに結合
+        text += '\n' + coastLineText;
+      }
 
       // CSVのテキストデータをパース
       this.params.depthMapData = this.parseCsv(text);
@@ -790,6 +807,16 @@ export class Main {
       .name(navigator.language.startsWith("ja") ? "プリセット" : "Preset")
       .onChange((value) => {
         this.switchDataset(value);
+      });
+
+
+    // 海岸線の表示切り替え
+    const coastlineFolder = gui.addFolder(navigator.language.startsWith("ja") ? "海岸線" : "Coastline");
+    coastlineFolder
+      .add(this.params, "showCoastLine")
+      .name(navigator.language.startsWith("ja") ? "海岸線表示" : "Show Coastline")
+      .onChange(() => {
+        this.switchDataset(this.params.currentDataset);
       });
 
   }
