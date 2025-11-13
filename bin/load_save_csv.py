@@ -76,6 +76,7 @@ def line_callback(line: str) -> None:
 def read_csv(file_path: Path) -> Tuple[List[List[float]], Dict[str, Dict[str, float]]]:
     """
     CSVファイルを読み込み、データのリストおよびlat, lon, depthの最大・最小値を返す。
+    epochがあってもなくても大丈夫なようにする
 
     Returns:
         data: List[List[float]]
@@ -103,12 +104,21 @@ def read_csv(file_path: Path) -> Tuple[List[List[float]], Dict[str, Dict[str, fl
             if not line or line.startswith('#'):
                 continue
             split_values = line.split(',')
-            if len(split_values) < 4:
+
+            if len(split_values) == 3:
+                try:
+                    lat, lon, depth = [float(x) for x in split_values[:3]]
+                    epoch = 0.0  # epochがない場合は0にする
+                except ValueError:
+                    continue
+            elif len(split_values) == 4:
+                try:
+                    lat, lon, depth, epoch = [float(x) for x in split_values[:4]]
+                except ValueError:
+                    continue
+            else:
                 continue
-            try:
-                lat, lon, depth, epoch = [float(x) for x in split_values[:4]]
-            except ValueError:
-                continue
+
             data.append([lat, lon, depth, epoch])
             min_lat = min(min_lat, lat)
             max_lat = max(max_lat, lat)
@@ -116,6 +126,7 @@ def read_csv(file_path: Path) -> Tuple[List[List[float]], Dict[str, Dict[str, fl
             max_lon = max(max_lon, lon)
             min_depth = min(min_depth, depth)
             max_depth = max(max_depth, depth)
+
             min_epoch = min(min_epoch, epoch)
             max_epoch = max(max_epoch, epoch)
 
@@ -123,7 +134,7 @@ def read_csv(file_path: Path) -> Tuple[List[List[float]], Dict[str, Dict[str, fl
         'lat': {'min': min_lat, 'max': max_lat},
         'lon': {'min': min_lon, 'max': max_lon},
         'depth': {'min': min_depth, 'max': max_depth},
-        'epoc': {'min': min_epoch, 'max': max_epoch}
+        'epoch': {'min': min_epoch, 'max': max_epoch}
     }
 
     tabulate_headers = ["", "lat", "lon", "depth"]
@@ -156,8 +167,6 @@ def load_csv(input_data_path: Path) -> pd.DataFrame | None:
             df.columns = ["lat", "lon", "depth"]
         elif df.shape[1] == 4:
             df.columns = ["lat", "lon", "depth", "epoch"]
-        elif df.shape[1] == 5:
-            df.columns = ["lat", "lon", "depth", "epoch", "cluster"]
         else:
             return None
     except Exception as e:
@@ -192,8 +201,6 @@ def save_points_as_csv(points: List[Dict[str, float]], output_file_path: Path) -
                 line = f"{p['lat']},{p['lon']},{p['depth']}"
                 if 'epoch' in p:
                     line += f",{p['epoch']}"
-                if 'cluster' in p:
-                    line += f",{p['cluster']}"
                 line += "\n"
                 f.write(line)
     except Exception as e:

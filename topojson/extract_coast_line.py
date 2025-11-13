@@ -373,7 +373,7 @@ def save_to_csv(
         # csv_f.write("latitude,longitude\n")
         # 各座標を1行ずつ書き込み
         for lat, lon in gps_points:
-            csv_f.write(f"{lat:.6f},{lon:.6f},0.0,0.0\n")
+            csv_f.write(f"{lat:.6f},{lon:.6f},0.0\n")
 
     logger.info(f"結果を {output_filepath} に保存しました。")
 

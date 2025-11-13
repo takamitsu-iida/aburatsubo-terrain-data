@@ -159,7 +159,7 @@ def interpolate_empty_leaf_nodes(quadtree: Quadtree):
         # IDW補間 (inverse distance weighted algorithm)
         if node_count > 2 and len(neighbor_points) > 3:
             avg_lat, avg_lon, avg_depth = idw_interpolate_value(mid_lat, mid_lon, neighbor_points)
-            node.points.append({'lat': avg_lat, 'lon': avg_lon, 'depth': avg_depth, 'epoch': 0})
+            node.points.append({'lat': avg_lat, 'lon': avg_lon, 'depth': avg_depth})
 
         # TODO: 平均ではなくクリギングなどの高度な補間手法を使う
 
@@ -288,7 +288,7 @@ if __name__ == '__main__':
                 for d in directions:
                     new_lat = lat + d[0] * quadtree.lat_per_meter
                     new_lon = lon + d[1] * quadtree.lon_per_meter
-                    new_point = {'lat': new_lat, 'lon': new_lon, 'depth': point['depth'], 'epoch': 0}
+                    new_point = {'lat': new_lat, 'lon': new_lon, 'depth': point['depth']}
                     quadtree.insert(new_point)
         logger.info("Inserted N, E, S, W points for interpolation.")
         logger.info(f"Post-insertion Quadtree stats\n{quadtree.get_stats_text()}\n")
@@ -306,11 +306,9 @@ if __name__ == '__main__':
         logger.info("Aggregated deepest node points.")
         logger.info(f"Post-aggregation Quadtree stats\n{quadtree.get_stats_text()}\n")
 
-
         # 点群をCSVファイルに保存する
         quadtree.save_to_csv(output_file_path)
         logger.info(f"Points data saved to: {output_file_path}")
-
 
     #
     # 実行

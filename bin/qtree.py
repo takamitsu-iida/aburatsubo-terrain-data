@@ -271,7 +271,7 @@ class QuadtreeNode:
         avg_lat = sum(p['lat'] for p in points) / n
         avg_lon = sum(p['lon'] for p in points) / n
         avg_depth = sum(p['depth'] for p in points) / n
-        return {'lat': avg_lat, 'lon': avg_lon, 'depth': avg_depth, 'epoch': 0}
+        return {'lat': avg_lat, 'lon': avg_lon, 'depth': avg_depth}
 
 
 class Quadtree:
@@ -453,7 +453,7 @@ class Quadtree:
         leaf_nodes = self.get_leaf_nodes()
 
         with open(filepath, mode='w', newline='', encoding='utf-8') as csvfile:
-            fieldnames = ['lat', 'lon', 'depth', 'epoch']
+            fieldnames = ['lat', 'lon', 'depth']
             writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
 
             # ヘッダ行は書かない
@@ -461,12 +461,8 @@ class Quadtree:
 
             for node in leaf_nodes:
                 for point in node.points:
-                    writer.writerow({
-                        'lat': point['lat'],
-                        'lon': point['lon'],
-                        'depth': point['depth'],
-                        'epoch': point.get('epoch', 0)
-                    })
+                    row = {'lat': point['lat'], 'lon': point['lon'], 'depth': point['depth']}
+                    writer.writerow(row)
 
         logger.info(f"Quadtree data saved to CSV: {filepath}")
 
@@ -646,7 +642,7 @@ if __name__ == '__main__':
 
     def main():
 
-        data_filename = "ALL_depth_map_data_202510_dd_ol.csv"
+        data_filename = "ALL_depth_map_data_202510_de_dd_ol.csv"
         data_path = data_dir.joinpath(data_filename)
         if not data_path.exists():
             logger.error("File not found: %s" % data_path)
@@ -700,7 +696,7 @@ if __name__ == '__main__':
                 for d in directions:
                     new_lat = lat + d[0] * quadtree.lat_per_meter
                     new_lon = lon + d[1] * quadtree.lon_per_meter
-                    new_point = {'lat': new_lat, 'lon': new_lon, 'depth': point['depth'], 'epoch': 0}
+                    new_point = {'lat': new_lat, 'lon': new_lon, 'depth': point['depth']}
                     quadtree.insert(new_point)
         logger.info("Inserted N, E, S, W points for interpolation.")
         logger.info(f"Post-insertion Quadtree stats\n{quadtree.get_stats_text()}\n")

@@ -267,7 +267,7 @@ if __name__ == '__main__':
 
     def main():
 
-        data_filename = "ALL_depth_map_data_202510_dd_ol.csv"
+        data_filename = "ALL_depth_map_data_202510_de_dd_ol.csv"
         data_path = data_dir.joinpath(data_filename)
         if not data_path.exists():
             logger.error("File not found: %s" % data_path)

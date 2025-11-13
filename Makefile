@@ -7,40 +7,45 @@ help:
 
 # 入力ファイル名(data/は含まず、ファイル名のみを指定)
 DATA_FILENAME = ALL_depth_map_data_202510.csv
-DATA_BASENAME = $(basename $(DATA_FILENAME))
+BASENAME = $(basename $(DATA_FILENAME))
 
+DE=_de
 DEDUP=_dd
 OUTLIER=_ol
 INTERPOLATE=_ip
 MEDIAN_FILTER=_mf
 
-dd: ## step1. deduplicate 重複する座標データを削除して新しいCSVファイルを作成する
-	@python3 bin/process_duplicate.py --input $(DATA_FILENAME) --output $(DATA_BASENAME)$(DEDUP).csv
+de: ## step0. drop epoch epoch列を削除して新しいCSVファイルを作成する
+	@python3 bin/process_drop_epoch.py --input $(DATA_FILENAME) --output $(BASENAME)$(DE).csv
+
+dd: de ## step1. deduplicate 重複する座標データを削除して新しいCSVファイルを作成する
+	@python3 bin/process_duplicate.py --input $(BASENAME)$(DE).csv --output $(BASENAME)$(DE)$(DEDUP).csv
 
 ol: dd ## step2. outlier 外れ値を検出して新しいCSVファイルを作成する
-	@python3 bin/process_outlier.py --input $(DATA_BASENAME)$(DEDUP).csv --output $(DATA_BASENAME)$(DEDUP)$(OUTLIER).csv
+	@python3 bin/process_outlier.py --input $(BASENAME)$(DE)$(DEDUP).csv --output $(BASENAME)$(DE)$(DEDUP)$(OUTLIER).csv
 
-ip: dd ol ## step3. interpolate 欠損値を補間して新しいCSVファイルを作成する
-	@python3 bin/process_interpolate.py --input $(DATA_BASENAME)$(DEDUP)$(OUTLIER).csv --output $(DATA_BASENAME)$(DEDUP)$(OUTLIER)$(INTERPOLATE).csv
+ip: ol ## step3. interpolate 欠損値を補間して新しいCSVファイルを作成する
+	@python3 bin/process_interpolate.py --input $(BASENAME)$(DE)$(DEDUP)$(OUTLIER).csv --output $(BASENAME)$(DE)$(DEDUP)$(OUTLIER)$(INTERPOLATE).csv
 
-mf: dd ol ip ## step4. median filter メディアンフィルタを適用して新しいCSVファイルを作成する
-	@python3 bin/process_median_filter.py --input $(DATA_BASENAME)$(DEDUP)$(OUTLIER)$(INTERPOLATE).csv --output $(DATA_BASENAME)$(DEDUP)$(OUTLIER)$(INTERPOLATE)$(MEDIAN_FILTER).csv
+mf: ip ## step4. median filter メディアンフィルタを適用して新しいCSVファイルを作成する
+	@python3 bin/process_median_filter.py --input $(BASENAME)$(DE)$(DEDUP)$(OUTLIER)$(INTERPOLATE).csv --output $(BASENAME)$(DE)$(DEDUP)$(OUTLIER)$(INTERPOLATE)$(MEDIAN_FILTER).csv
 
-all: dd ol ip mf ## 重複排除→外れ値除去→補間→メディアンフィルタを順に全て実行して最終データを作成する
-	@cp data/$(DATA_BASENAME)$(DEDUP)$(OUTLIER)$(INTERPOLATE)$(MEDIAN_FILTER).csv static/data/bathymetric_data.csv
+all: mf ## 重複排除→外れ値除去→補間→メディアンフィルタを順に全て実行して最終データを作成する
+	@cp data/$(BASENAME)$(DE)$(DEDUP)$(OUTLIER)$(INTERPOLATE)$(MEDIAN_FILTER).csv static/data/bathymetric_data.csv
 
 scatter: ## 散布図を作成する
-	@if [ -f data/$(DATA_BASENAME).csv ]; then \
-		python3 bin/draw_scatter.py --input $(DATA_BASENAME).csv --title "Original"; \
+	@if [ -f data/$(BASENAME)$(DE).csv ]; then \
+		python3 bin/draw_scatter.py --input $(BASENAME)$(DE).csv --title "Original"; \
 	fi
-	@if [ -f data/$(DATA_BASENAME)$(DEDUP).csv ]; then \
-		python3 bin/draw_scatter.py --input $(DATA_BASENAME)$(DEDUP).csv --title "Deduplicated"; \
+	@if [ -f data/$(BASENAME)$(DE)$(DEDUP).csv ]; then \
+		python3 bin/draw_scatter.py --input $(BASENAME)$(DE)$(DEDUP).csv --title "Deduplicated"; \
 	fi
-	@if [ -f data/$(DATA_BASENAME)$(DEDUP)$(OUTLIER).csv ]; then \
-		python3 bin/draw_scatter.py --input $(DATA_BASENAME)$(DEDUP)$(OUTLIER).csv --title "Outlier removed"; \
+	@if [ -f data/$(BASENAME)$(DE)$(DEDUP)$(OUTLIER).csv ]; then \
+		python3 bin/draw_scatter.py --input $(BASENAME)$(DE)$(DEDUP)$(OUTLIER).csv --title "Outlier removed"; \
 	fi
 
 clean: ## 中間データファイルを削除する
+	@rm -f data/*_de.csv
 	@rm -f data/*_dd.csv
 	@rm -f data/*_dd_ol.csv
 	@rm -f data/*_dd_ol_ip.csv

@@ -320,7 +320,7 @@ export class Main {
    // 先頭行が数字で始まる場合はヘッダ無しと判定
     const firstLine = lines[0].trim();
     const isHeader = isNaN(Number(firstLine.split(',')[0]));
-    const headers = isHeader ? lines[0].split(',').map(h => h.trim()) : ["lat", "lon", "depth", "epoch"];
+    const headers = isHeader ? lines[0].split(',').map(h => h.trim()) : ["lat", "lon", "depth"];
 
     // データ開始行のインデックス
     const startIdx = isHeader ? 1 : 0;
@@ -342,10 +342,11 @@ export class Main {
         for (let j = 0; j < headers.length; j++) {
           d[headers[j]] = parseFloat(rows[j].trim());
         }
-        // 5列ある場合は、クラスタ番号が入っている
-        if (rows.length === 5) {
-          d['cluster'] = parseInt(rows[4].trim());
+        // 4列ある場合は、epochが入っている
+        if (rows.length === 4) {
+          d['epoch'] = parseInt(rows[3].trim());
         }
+
         dataList.push(d);
 
         // 緯度経度の最大値、最小値を調べる
