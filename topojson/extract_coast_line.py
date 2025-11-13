@@ -474,9 +474,10 @@ if __name__ == '__main__':
     sampling_distance_m: int = 10
 
     # 出力ファイル名
-    output_csv_filename: str = 'coastline_points.csv'
-    output_csv_path: str = app_home.joinpath('data', output_csv_filename)
-    output_image_filename: str = 'coastline_visualization.png'
+    output_csv_filename: str = 'coastline.csv'
+    output_csv_path: str = app_home.joinpath('static', 'data', output_csv_filename)
+
+    output_image_filename: str = 'coastline.png'
     output_image_path: str = app_home.joinpath('img', output_image_filename)
 
 
