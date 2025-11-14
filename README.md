@@ -40,21 +40,21 @@ After processing csv [ALL_depth_map_data_202510_dd_ol_ip_mf.csv](/data/ALL_depth
 
 <br>
 
-Oldest epoch: 2017-09-08 22:08:11
+Oldest epoch (JST): 2017-09-09 07:08:11
 
-Newest epoch: 2025-10-05 04:19:12
+Newest epoch (JST): 2025-10-05 13:19:12
 
 <br><br>
 
 ## 3D Visualization (my own 3d map)
 
-I created a custom 3d visualization tool. It's specifically for Aburatsubo in Kanagawa JAPAN.
+I created a custom 3D visualization tool. It's specifically for Aburatsubo in Kanagawa JAPAN.
 
 <br>
 
 [Live Demo](https://takamitsu-iida.github.io/aburatsubo-terrain-data/index-bathymetric-data.html)
 
-[Live Demo (dev)](https://takamitsu-iida.github.io/aburatsubo-terrain-data/index-bathymetric-data-dev.html)
+[Live Demo (development version)](https://takamitsu-iida.github.io/aburatsubo-terrain-data/index-bathymetric-data-dev.html)
 
 [![ScreenImage](/assets/3d-visualization.png)](https://takamitsu-iida.github.io/aburatsubo-terrain-data/index-bathymetric-data.html)
 

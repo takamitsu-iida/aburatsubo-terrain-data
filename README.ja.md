@@ -10,7 +10,7 @@
 
 ## CSVデータ
 
-**2025年10月** のデータが最後に採取したデータとなります。
+**2025年10月** のデータが最後に採取した最新です。
 
 [加工前のCSV](https://takamitsu-iida.github.io/aburatsubo-terrain-data/data/ALL_depth_map_data_202510.csv)
 
@@ -31,13 +31,11 @@
 
 <br>
 
-epoch列はスキャンしたUNIX時です。これをみると、
+epoch列はスキャンしたUNIX時です。JSTに変換するとこのような時刻になります。
 
-最も古いスキャン 2017-09-08 22:08:11 (UKT)
+Oldest epoch (JST): 2017-09-09 07:08:11
 
-最も新しいスキャン 2025-10-05 04:19:12 (UKT)
-
-ということがわかります。
+Newest epoch (JST): 2025-10-05 13:19:12
 
 <br><br>
 
@@ -54,12 +52,18 @@ Deeperのサブスクリプション会員になると3Dでマップが表示さ
 
 [![ScreenImage](/assets/3d-visualization.png)](https://takamitsu-iida.github.io/aburatsubo-terrain-data/index-bathymetric-data.html)
 
+
+<br>
+
+油壷専用になっているのは、Topojson形式の油壷周辺地図を重ねて表示しているためです。
+
+データを3D表示するだけなら、どこの場所のデータでもいけると思います。
+
 <br>
 
 **TODO**
 
-- 地図(leafletとか？)と連動させて、どの場所のデータでも可視化できるようにする
-- CSVファイルからUNIX時間の情報を削除してファイルを軽くする
+- 地図(mapboxとか？)と連動させて、どの場所のデータでも可視化できるようにする
 
 <br><br>
 
@@ -71,7 +75,7 @@ Deeperのサブスクリプション会員になると3Dでマップが表示さ
 
 <br>
 
-油壷の北側の海域はまだまだデータ不足です。北側で釣りをすることが少ないためです。
+2025年10月現在、油壷の北側の海域はまだまだデータ不足です。北側で釣りをすることが少ないためです。
 
 **TODO**
 

@@ -477,8 +477,8 @@ export class Main {
     const centerLon = this.params.centerLon;
     const centerLat = this.params.centerLat;
     return [
-      (lon - centerLon) * scale,
-      -1 * (lat - centerLat) * scale
+      (lon - centerLon) * scale,      // X軸: 経度を中心から相対座標に変換し、スケール適用
+      -1 * (lat - centerLat) * scale  // Z軸: 緯度を中心から相対座標に変換し、マイナスをかけてスケール適用（Z軸が手前向きのため）
     ];
   }
 
@@ -613,7 +613,7 @@ export class Main {
       1,
       1000
     );
-    this.camera.position.set(0, 100, 100);
+    this.camera.position.set(0, this.params.xzGridSize / 2.0, this.params.xzGridSize / 2.0);
 
     // レイヤを設定
     this.camera.layers.enable(0); // enabled by default
@@ -621,10 +621,7 @@ export class Main {
     this.camera.layers.enable(2); // 2: scale
 
     // レンダラ
-    this.renderer = new THREE.WebGLRenderer({
-      antialias: true,
-    });
-
+    this.renderer = new THREE.WebGLRenderer({antialias: true});
     this.renderer.setSize(this.sizes.width, this.sizes.height);
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 
@@ -647,8 +644,7 @@ export class Main {
     //   /
     //  Z(blue)
     //
-    const xzGridSize = this.params.xzGridSize;
-    const axesHelper = new THREE.AxesHelper(xzGridSize);
+    const axesHelper = new THREE.AxesHelper(this.params.xzGridSize);
     this.scene.add(axesHelper);
 
     // 環境光
@@ -926,19 +922,6 @@ export class Main {
   };
 
 
-  splitPointsByCluster = (data) => {
-    const clusters = {};
-    data.forEach(point => {
-      const clusterId = point.cluster;
-      if (!clusters[clusterId]) clusters[clusterId] = [];
-      clusters[clusterId].push(point);
-    });
-
-    // クラスタごとの配列リストを返す
-    return Object.values(clusters);
-  }
-
-
   // 三角形が有効かどうかを判定する関数
   isValidTriangle = (posA, posB, posC) => {
     if (!this.params.enableDelaunayFilter) {
@@ -967,7 +950,7 @@ export class Main {
   }
 
 
-  // CSVデータを使ってドロネー三角形でメッシュ化する
+  // CSVデータをもとにドロネー三角形でメッシュ化する
   initDelaunayFromCsv = () => {
 
     // 作成するポイントクラウドのリスト
@@ -976,77 +959,77 @@ export class Main {
     // 作成するメッシュのリスト
     const terrainMeshList = [];
 
-    // CSVデータをそのまま使う
+    // 表示用に正規化したデータ
     const data = this.params.depthMapData;
 
-    // dataをクラスタごとに分解する
-    const clusteredData = this.splitPointsByCluster(data);
+    // Three.jsのVector3配列を作成してデータを格納する
+    const positions = [];
+    const colors = [];
 
-    // クラスタごとにドロネー三角形でメッシュを作成
-    clusteredData.forEach(cluster => {
-
-      // Three.jsのVector3配列を作成して、データを格納する
-      const positions = [];
-      const colors = [];
-      cluster.forEach(point => {
-        // lon: X, lat: Z, depth: Y
-        positions.push(new THREE.Vector3(point.lon, point.depth, point.lat));
-        const color = this.getDepthColor(point.depth);
-        colors.push(color.r, color.g, color.b);
-      });
-
-      // ポイントクラウドのジオメトリを作成
-      const geometry = new THREE.BufferGeometry().setFromPoints(positions);
-      geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
-
-      // マテリアルを作成
-      const pointsMaterial = new THREE.PointsMaterial({
-        color: 0x99ccff,
-        size: this.params.pointSize,
-      });
-
-      // 点群を作成
-      const pointMesh = new THREE.Points(geometry, pointsMaterial);
-      pointMesh.visible = this.params.showPointCloud;
-      this.scene.add(pointMesh);
-      pointMeshList.push(pointMesh);
-
-      const delaunay = Delaunator.from(
-        positions.map(v => [v.x, v.z])
-      );
-
-      const meshIndex = [];
-
-      for (let i = 0; i < delaunay.triangles.length; i += 3) {
-        const a = delaunay.triangles[i + 0];
-        const b = delaunay.triangles[i + 1];
-        const c = delaunay.triangles[i + 2];
-
-        // 三角形の各頂点を取得
-        const posA = positions[a];
-        const posB = positions[b];
-        const posC = positions[c];
-
-        // 三角形が有効かどうかを判定して、メッシュインデックスに追加
-        if (this.isValidTriangle(posA, posB, posC)) {
-          meshIndex.push(a, b, c);
-        }
-      }
-
-      geometry.setIndex(meshIndex);
-      geometry.computeVertexNormals();
-
-      // メッシュマテリアル
-      const material = new THREE.MeshLambertMaterial({
-        vertexColors: true,
-        wireframe: this.params.wireframe,
-      });
-
-      // メッシュを生成
-      const terrainMesh = new THREE.Mesh(geometry, material);
-      this.scene.add(terrainMesh);
-      terrainMeshList.push(terrainMesh);
+    // データをループしてpositionsとcolorsに格納する
+    data.forEach(point => {
+      // lon: X, lat: Z, depth: Y
+      positions.push(new THREE.Vector3(point.lon, point.depth, point.lat));
+      const color = this.getDepthColor(point.depth);
+      colors.push(color.r, color.g, color.b);
     });
+
+    // ポイントクラウドのジオメトリを作成
+    const pointGeometry = new THREE.BufferGeometry().setFromPoints(positions);
+    pointGeometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+
+    // ポイントクラウド用のマテリアルを作成
+    const pointsMaterial = new THREE.PointsMaterial({
+      // color: 0x99ccff,
+      vertexColors: true,
+      size: this.params.pointSize,
+    });
+
+    // 点群を作成してシーンに追加
+    const pointMesh = new THREE.Points(pointGeometry, pointsMaterial);
+    pointMesh.visible = this.params.showPointCloud;
+    this.scene.add(pointMesh);
+    pointMeshList.push(pointMesh);
+
+    // ドロネー三角形を作成
+    const delaunay = Delaunator.from(
+      positions.map(v => [v.x, v.z])
+    );
+
+    // 地形メッシュ用のジオメトリを作成
+    const terrainGeometry = new THREE.BufferGeometry().setFromPoints(positions);
+    terrainGeometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+
+    const meshIndex = [];
+    for (let i = 0; i < delaunay.triangles.length; i += 3) {
+      const a = delaunay.triangles[i + 0];
+      const b = delaunay.triangles[i + 1];
+      const c = delaunay.triangles[i + 2];
+
+      // 三角形の各頂点を取得
+      const posA = positions[a];
+      const posB = positions[b];
+      const posC = positions[c];
+
+      // 三角形が有効かどうかを判定して、メッシュインデックスに追加
+      if (this.isValidTriangle(posA, posB, posC)) {
+        meshIndex.push(a, b, c);
+      }
+    }
+
+    terrainGeometry.setIndex(meshIndex);
+    terrainGeometry.computeVertexNormals();
+
+    // 地形メッシュ用のマテリアルを作成
+    const terrainMaterial = new THREE.MeshLambertMaterial({
+      vertexColors: true,
+      wireframe: this.params.wireframe,
+    });
+
+    // メッシュを生成してシーンに追加
+    const terrainMesh = new THREE.Mesh(terrainGeometry, terrainMaterial);
+    this.scene.add(terrainMesh);
+    terrainMeshList.push(terrainMesh);
 
     // 何個のポイントが表示されているかを表示
     document.getElementById('debugContainer').textContent = `${this.params.totalPointCount.toLocaleString()} points displayed`;
@@ -1086,14 +1069,15 @@ export class Main {
 
 
   getDepthColor = (depth) => {
+    // depthStepsは深い順（-60から-1へ）にソートされているので
+    // 深い順にループして、最初に depth <= step となる色を返す
     for (let i = 0; i < this.depthSteps.length; i++) {
       if (depth <= this.depthSteps[i]) {
         return new THREE.Color(this.depthColors[this.depthSteps[i]]);
       }
     }
 
-    // 海岸線（水深0m付近）は透明色にした方がいいのかもしれないけど、
-    // alphaを導入するとコードをたくさん変更しないといけないので、とりあえず背景色と同じ黒を返す
+    // depthがすべてのstep（-1）より浅い場合（海岸線付近）は背景色と同じ黒を返す
     return new THREE.Color(0x000000);
   }
 
@@ -1269,15 +1253,13 @@ export class Main {
 
 
   createMeshFromShapes = (shapes) => {
-    // ExtrudeGeometryに渡すdepthパラメータ（厚み）
-    const depth = 1.0;
 
     // ExtrudeGeometryで厚みを持たせる
     const geometry = new THREE.ExtrudeGeometry(shapes, {
-      depth: depth,
-      bevelEnabled: true,   // エッジを斜めにする
-      bevelSize: 0.5,       // 斜めのサイズ
-      bevelThickness: 0.5,  // 斜めの厚み
+      depth: 1.0,           // 厚み
+      bevelEnabled: true,   // エッジを斜めにするかどうか
+      bevelSize: 0.2,       // 斜めのサイズ
+      bevelThickness: 0.2,  // 斜めの厚み
       bevelSegments: 1,     // 斜めのセグメント数
     });
 
@@ -1305,7 +1287,7 @@ export class Main {
         new THREE.Plane(new THREE.Vector3(0, 0, -1), clippingSize * 2),  // Z座標が-xzGridSize * 2以上を表示
         new THREE.Plane(new THREE.Vector3(-1, 0, 0), clippingSize),      // X座標がxzGridSize以下を表示
         new THREE.Plane(new THREE.Vector3(1, 0, 0), clippingSize),       // X座標が-xzGridSize以上を表示
-        new THREE.Plane(new THREE.Vector3(0, 1, 0), 0),                  // Y座標が0以上を表示
+        new THREE.Plane(new THREE.Vector3(0, 1, 0), 0),                  // Y座標が0以上を表示、水面(Y=0より下)を消す
       ],
     });
 

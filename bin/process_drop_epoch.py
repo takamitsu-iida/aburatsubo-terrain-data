@@ -160,14 +160,29 @@ if __name__ == '__main__':
         # describe()
         logger.info(f"describe() --- 削除前\n{df.describe().to_markdown()}\n")
 
-        # epoch列を削除する
-        df = drop_epoch(df)
+        if 'epoch' in df.columns:
+            # 最小epoch値の取得と変換
+            min_epoch = df['epoch'].min()
+            min_datetime = pd.to_datetime(min_epoch, unit='ms').tz_localize('UTC').tz_convert('Asia/Tokyo')
 
-        logger.info(f"describe() --- 削除後\n{df.describe().to_markdown()}\n")
+            # 最大epoch値の取得と変換
+            max_epoch = df['epoch'].max()
+            max_datetime = pd.to_datetime(max_epoch, unit='ms').tz_localize('UTC').tz_convert('Asia/Tokyo')
 
-        # epoch列を削除したデータをCSVファイルとして保存
-        save_csv(df, output_file_path)
-        logger.info(f"epoch列を削除したデータを保存しました: {output_filename}")
+            # 最も古いepoch値を時刻形式で表示
+            logger.info(f"Oldest epoch (JST): {min_datetime.strftime('%Y-%m-%d %H:%M:%S')}\n")
+
+            # 最も新しいepoch値を時刻形式で表示
+            logger.info(f"Newest epoch (JST): {max_datetime.strftime('%Y-%m-%d %H:%M:%S')}\n")
+
+            # epoch列を削除する
+            df = drop_epoch(df)
+
+            logger.info(f"describe() --- 削除後\n{df.describe().to_markdown()}\n")
+
+            # epoch列を削除したデータをCSVファイルとして保存
+            save_csv(df, output_file_path)
+            logger.info(f"epoch列を削除したデータを保存しました: {output_filename}")
 
     #
     # 実行

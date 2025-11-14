@@ -172,19 +172,6 @@ if __name__ == '__main__':
         # describe()
         logger.info(f"describe() --- 削除前\n{df.describe().to_markdown()}\n")
 
-        if 'epoch' in df.columns:
-            # epoch値の最小値と最大値を取得
-            min_epoch = df['epoch'].min()
-            min_datetime = pd.to_datetime(min_epoch, unit='ms')
-            max_epoch = df['epoch'].max()
-            max_datetime = pd.to_datetime(max_epoch, unit='ms')
-
-            # 最も古いepoch値を時刻形式で表示
-            logger.info(f"Oldest epoch: {min_datetime.strftime('%Y-%m-%d %H:%M:%S')}\n")
-
-            # 最も新しいepoch値を時刻形式で表示
-            logger.info(f"Newest epoch: {max_datetime.strftime('%Y-%m-%d %H:%M:%S')}\n")
-
         # 重複した座標のデータを削除する
         df = process_duplicates(df)
 
