@@ -14,7 +14,7 @@
 
 [加工前のCSV](https://takamitsu-iida.github.io/aburatsubo-terrain-data/data/ALL_depth_map_data_202510.csv)
 
-[加工後のCSV](https://takamitsu-iida.github.io/aburatsubo-terrain-data/data/ALL_depth_map_data_202510_dd_ol_ip_mf.csv)
+[加工後のCSV](https://takamitsu-iida.github.io/aburatsubo-terrain-data/data/ALL_depth_map_data_202510_de_dd_ol_ip_mf.csv)
 
 <br>
 
