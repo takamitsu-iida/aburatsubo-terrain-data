@@ -602,8 +602,9 @@ export class Main {
     // resizeイベントのハンドラを登録
     window.addEventListener("resize", this.onWindowResize, false);
 
-    // シーン
+    // シーン、背景色はデフォルトの黒を明示的に指定
     this.scene = new THREE.Scene();
+    this.scene.background = new THREE.Color(0x000000);
 
     // カメラ
     this.camera = new THREE.PerspectiveCamera(
@@ -1085,14 +1086,15 @@ export class Main {
 
 
   getDepthColor = (depth) => {
-    const depthSteps = this.depthSteps;
-    const depthColors = this.depthColors;
-    for (let i = 0; i < depthSteps.length; i++) {
-      if (depth <= depthSteps[i]) {
-        return new THREE.Color(depthColors[depthSteps[i]]);
+    for (let i = 0; i < this.depthSteps.length; i++) {
+      if (depth <= this.depthSteps[i]) {
+        return new THREE.Color(this.depthColors[this.depthSteps[i]]);
       }
     }
-    return new THREE.Color(depthColors[depthSteps[depthSteps.length - 1]]);
+
+    // 海岸線（水深0m付近）は透明色にした方がいいのかもしれないけど、
+    // alphaを導入するとコードをたくさん変更しないといけないので、とりあえず背景色と同じ黒を返す
+    return new THREE.Color(0x000000);
   }
 
 
