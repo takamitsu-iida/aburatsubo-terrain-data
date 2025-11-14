@@ -744,6 +744,9 @@ export class Main {
         this.pointMeshList.forEach((pointMesh) => {
           pointMesh.visible = this.params.showPointCloud;
         });
+        this.terrainMeshList.forEach((terrainMesh) => {
+          terrainMesh.visible = !this.params.showPointCloud;
+        });
       },
 
       'landmark': () => {
