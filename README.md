@@ -21,9 +21,9 @@ The data was collected using a [Deeper](https://deepersonar.com/en-all) fish fin
 
 <br>
 
-Before processing csv [ALL_depth_map_data_202510.csv](/data/ALL_depth_map_data_202510.csv)
+Before processing csv [ALL_depth_map_data_202510.csv](https://takamitsu-iida.github.io/aburatsubo-terrain-data/data/ALL_depth_map_data_202510.csv)
 
-After processing csv [ALL_depth_map_data_202510_de_dd_ol_ip_mf.csv](/data/ALL_depth_map_data_202510_de_dd_ol_ip_mf.csv)
+After processing csv [ALL_depth_map_data_202510_de_dd_ol_ip_mf.csv](https://takamitsu-iida.github.io/aburatsubo-terrain-data/data/ALL_depth_map_data_202510_de_dd_ol_ip_mf.csv)
 
 <br>
 
