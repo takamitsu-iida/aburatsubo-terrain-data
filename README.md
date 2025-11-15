@@ -8,6 +8,15 @@
 
 These are water depth data collected while floating on the sea in Aburatsubo in a rowboat.
 
+<br>
+
+> [!NOTE]
+>
+> Aburatsubo Kanagawa Japan
+> https://maps.app.goo.gl/bigy5d56XkTJaZuN8
+
+<br>
+
 The data was collected using a [Deeper](https://deepersonar.com/en-all) fish finder.
 
 
