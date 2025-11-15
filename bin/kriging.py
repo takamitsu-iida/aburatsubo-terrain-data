@@ -173,8 +173,6 @@ def split_region_by_quadtree(df, min_points=30, min_size_m=30, max_depth=8):
     return clusters
 
 
-
-
 def grid_and_kriging(df, grid_size_m=10):
     # 領域範囲
     min_lat, max_lat = df['lat'].min(), df['lat'].max()
@@ -199,8 +197,8 @@ def grid_and_kriging(df, grid_size_m=10):
     z_grid, ss = OK.execute('grid', grid_x, grid_y)
     grid_xx, grid_yy = np.meshgrid(grid_x, grid_y)
     result_df = pd.DataFrame({
-        'lon': grid_xx.flatten() / METERS_PER_DEG_LON,
         'lat': grid_yy.flatten() / METERS_PER_DEG_LAT,
+        'lon': grid_xx.flatten() / METERS_PER_DEG_LON,
         'depth': z_grid.flatten()
     })
     return result_df
@@ -260,10 +258,7 @@ def save_kriged_df_to_csv(kriged_dfs, output_csv_path):
     logger.info(f"CSV saved: {output_csv_path}")
 
 
-
-
 if __name__ == '__main__':
-
 
     def main():
 
