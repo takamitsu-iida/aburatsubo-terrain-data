@@ -203,7 +203,9 @@ export class Main {
 
     // ドロネー三角形のフィルタリングパラメータ
     enableDelaunayFilter: true,
-    maxTriangleEdgeLength: 20,  // エッジの最大長さ 画面サイズxzGridSizeが200の場合の初期値
+
+    // エッジの最大長さ 画面サイズxzGridSizeが200の場合の初期値 200の10%に相当
+    maxTriangleEdgeLength: 20,
   }
 
   //
@@ -712,14 +714,14 @@ export class Main {
 
     displayFolder
       .add(this.params, "autoRotate")
-      .name(navigator.language.startsWith("ja") ? "自動回転" : "rotation")
+      .name(navigator.language.startsWith("ja") ? "自動回転" : "Auto Rotate")
       .onChange((value) => {
         this.controller.autoRotate = value;
       });
 
     displayFolder
       .add(this.params, "pointSize")
-      .name(navigator.language.startsWith("ja") ? "ポイントサイズ" : "pointSize")
+      .name(navigator.language.startsWith("ja") ? "ポイントサイズ" : "Point Size")
       .min(0.1)
       .max(1.0)
       .step(0.1)
@@ -766,15 +768,15 @@ export class Main {
 
     displayFolder
       .add(displayParams, "pointCloud")
-      .name(navigator.language.startsWith("ja") ? "ポイントクラウド表示" : "Show point cloud");
+      .name(navigator.language.startsWith("ja") ? "ポイントクラウド表示" : "Point cloud");
 
     displayFolder
       .add(displayParams, 'landmark')
-      .name(navigator.language.startsWith("ja") ? "ランドマーク表示" : "Show landmark");
+      .name(navigator.language.startsWith("ja") ? "ランドマーク表示" : "Landmark");
 
     displayFolder
       .add(displayParams, 'scale')
-      .name(navigator.language.startsWith("ja") ? "縮尺表示" : "Show scale");
+      .name(navigator.language.startsWith("ja") ? "縮尺表示" : "Scale");
 
     // ドロネー三角形に関するフィルタ処理
     const delaunayFolder = gui.addFolder(navigator.language.startsWith("ja") ? "ドロネー三角形" : "Delaunay Filter");
@@ -789,8 +791,8 @@ export class Main {
     delaunayFolder
       .add(this.params, "maxTriangleEdgeLength")
       .name(navigator.language.startsWith("ja") ? "最大辺長" : "Max Edge Length")
-      .min(5)
-      .max(50)
+      .min(this.params.xzGridSize * 0.025)
+      .max(this.params.xzGridSize * 0.25)
       .step(1)
       .onChange(() => {
         doLater(() => {
@@ -810,11 +812,11 @@ export class Main {
       });
 
 
-    // 海岸線の表示切り替え
+    // 海岸線データを使うかどうか
     const coastlineFolder = gui.addFolder(navigator.language.startsWith("ja") ? "海岸線" : "Coastline");
     coastlineFolder
       .add(this.params, "showCoastLine")
-      .name(navigator.language.startsWith("ja") ? "海岸線表示" : "Show Coastline")
+      .name(navigator.language.startsWith("ja") ? "海岸線データ" : "Coastline Data")
       .onChange(() => {
         this.switchDataset(this.params.currentDataset);
       });
