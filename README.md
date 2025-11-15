@@ -56,7 +56,16 @@ I created a custom 3D visualization tool. It's specifically for Aburatsubo in Ka
 
 [Live Demo (development version)](https://takamitsu-iida.github.io/aburatsubo-terrain-data/index-bathymetric-data-dev.html)
 
-[![ScreenImage](/assets/3d-visualization.png)](https://takamitsu-iida.github.io/aburatsubo-terrain-data/index-bathymetric-data.html)
+<br>
+
+**screen shot**
+
+![point cloud](/assets/screen_point_cloud.png)
+
+![wireframe](/assets/screen_wireframe.png)
+
+![mesh](/assets/screen_mesh.png)
+
 
 <br><br>
 

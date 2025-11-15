@@ -50,13 +50,15 @@ Deeperのサブスクリプション会員になると3Dでマップが表示さ
 
 [Live Demo (開発中)](https://takamitsu-iida.github.io/aburatsubo-terrain-data/index-bathymetric-data-dev.html)
 
-[![ScreenImage](/assets/3d-visualization.png)](https://takamitsu-iida.github.io/aburatsubo-terrain-data/index-bathymetric-data.html)
-
 <br>
 
-油壷専用になっているのは、Topojson形式の油壷周辺地図を重ねて表示しているためです。
+**スクリーンショット**
 
-CSVデータを3D表示するだけなら、どこの場所のデータでもいけると思います。
+![point cloud](/assets/screen_point_cloud.png)
+
+![wireframe](/assets/screen_wireframe.png)
+
+![mesh](/assets/screen_mesh.png)
 
 <br>
 
