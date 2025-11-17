@@ -1,14 +1,11 @@
+/*
+PythonでCSVデータを加工しているので、JavaScript側ではそれをそのまま利用します。
+デローネ三角形でメッシュを生成して海底地形図を描画します。
+*/
+
 import * as THREE from "three";
 import { OrbitControls } from "three/controls/OrbitControls.js";
 import { CSS2DRenderer, CSS2DObject } from 'three/libs/CSS2DRenderer.js';
-
-/*
-
-Pythonでデータを集約しているので、JavaScript側ではそのまま利用します。
-
-ドロネー三角形でメッシュを生成して可視化します。
-
-*/
 
 // lil-gui
 import { GUI } from "three/libs/lil-gui.module.min.js";
@@ -34,6 +31,19 @@ https://github.com/mourner/robust-predicates
 ここからReleasesの最新版（2024年9月時点でv3.0.2）をダウンロードする。
 この中のsrcフォルダのjavascriptファイルをコピーして使う。
 
+static/libsはこのようなファイル配置にしている。
+
+libs
+├── delaunator-5.0.1
+│   └── index.js
+├── robust-predicates-3.0.2
+│   ├── incircle.js
+│   ├── insphere.js
+│   ├── orient2d.js
+│   ├── orient3d.js
+│   ├── predicates.min.js
+│   └── util.js
+
 HTMLではこのようなimportmapを使う。
 
 <!-- three.js -->
@@ -48,6 +58,7 @@ HTMLではこのようなimportmapを使う。
     }
   }
 </script>
+
 */
 
 export class Main {
@@ -61,14 +72,16 @@ export class Main {
     height: 0
   }
 
-  // 水深を表示するHTML要素
+  // 水深を表示するHTML要素 <div id="depthContainer"></div>
   depthContainer;
 
-  // 緯度経度を表示するHTML要素
+  // 緯度経度を表示するHTML要素 <div id="coordinatesContainer"></div>
   coordinatesContainer;
 
-  // 方位磁針を表示するHTML要素
+  // 方位磁針を表示するHTML要素 <div id="compassContainer"></div>
   compassContainer;
+
+  // 方位磁針の画像要素 <div id="compass"></div>
   compassElement;
 
   // Three.jsの各種インスタンス
@@ -106,6 +119,16 @@ export class Main {
     interval: 1 / 30,  // = 30fps
   }
 
+  // 地形図のポイントクラウド（guiで表示を操作するためにインスタンス変数にする）
+  pointMeshList = [];
+
+  // 変数
+  // 地形図のメッシュのリスト（guiで表示を操作するためにインスタンス変数にする）
+  terrainMeshList = [];
+
+
+  // 設定用パラメータ
+  // HTMLで上書き可能
   params = {
 
     // 利用可能なCSVファイルのリスト（HTMLで指定したもので上書きされる）
@@ -208,87 +231,22 @@ export class Main {
     maxTriangleEdgeLength: 20,
   }
 
+
   //
-  // データセットを切り替える関数
-  //
-  switchDataset = async (datasetName) => {
-    if (this.params.isLoading) {
-      return;
-    }
-
-    // ローディング状態を表示
-    this.showLoadingIndicator(true);
-
-    try {
-      // プリセットファイル
-      let dataPath = this.params.availableDatasets[datasetName];
-
-      // CSVデータをロード
-      await this.loadCsv(dataPath);
-
-      // データを正規化
-      this.normalizeDepthMapData();
-
-      // 現在のデータセット名を更新
-      this.params.currentDataset = datasetName;
-
-      // コンテンツを再初期化
-      this.initContents();
-
-    } catch (error) {
-      console.error(`Error switching dataset: ${error}`);
-    } finally {
-      // ローディング状態を非表示
-      this.showLoadingIndicator(false);
-    }
-  }
-
-  // ローディングインジケータの表示/非表示
-  showLoadingIndicator = (show) => {
-    this.params.isLoading = show;
-
-    const loadingContainer = document.getElementById('loadingContainer');
-
-    if (show) {
-      // ローディング画面を表示
-      loadingContainer.style.display = 'block';
-      loadingContainer.classList.remove('fadeout');
-      loadingContainer.classList.add('visible');
-    } else {
-      // ローディング画面を非表示にする
-      const interval = setInterval(() => {
-        loadingContainer.classList.add('fadeout');
-        clearInterval(interval);
-      }, 500);
-
-      // アニメーション完了後に完全に非表示にする
-      loadingContainer.addEventListener('transitionend', (event) => {
-        if (event.target === loadingContainer) {
-          // 表示を完全に無効化してマウスイベントを通すようにする
-          loadingContainer.style.display = 'none';
-          loadingContainer.classList.remove('visible', 'fadeout');
-        }
-      }, { once: true }); // once: true で一度だけ実行
-    }
-
-  }
-
-
-  // 変数
-  // 地形図のポイントクラウド（guiで表示を操作するためにインスタンス変数にする）
-  pointMeshList;
-
-  // 変数
-  // 地形図のメッシュのリスト（guiで表示を操作するためにインスタンス変数にする）
-  terrainMeshList = [];
-
   // コンストラクタ
+  //
   constructor(params = {}) {
+     // paramsを受け取って上記のparamsを上書きする
     this.params = Object.assign(this.params, params);
+
+    // 初期化処理
     this.init();
   }
 
 
+  //
+  // 初期化処理
+  //
   init = async () => {
 
     // 取得するデータのパスを取得
@@ -331,6 +289,9 @@ export class Main {
   }
 
 
+  //
+  // コンテンツを初期化
+  //
   initContents = () => {
     // アニメーションを停止
     this.stop();
@@ -363,7 +324,79 @@ export class Main {
     this.render();
   }
 
+
+  //
+  // データセットを切り替えて初期化する
+  //
+  switchDataset = async (datasetName) => {
+    if (this.params.isLoading) {
+      return;
+    }
+
+    // ローディング状態を表示
+    this.showLoadingIndicator(true);
+
+    try {
+      // プリセットファイル
+      let dataPath = this.params.availableDatasets[datasetName];
+
+      // CSVデータをロード
+      await this.loadCsv(dataPath);
+
+      // データを正規化
+      this.normalizeDepthMapData();
+
+      // 現在のデータセット名を更新
+      this.params.currentDataset = datasetName;
+
+      // コンテンツを再初期化
+      this.initContents();
+
+    } catch (error) {
+      console.error(`Error switching dataset: ${error}`);
+    } finally {
+      // ローディング状態を非表示
+      this.showLoadingIndicator(false);
+    }
+  }
+
+
+  //
+  // ローディングインジケータの表示/非表示
+  //
+  showLoadingIndicator = (show) => {
+    this.params.isLoading = show;
+
+    const loadingContainer = document.getElementById('loadingContainer');
+
+    if (show) {
+      // ローディング画面を表示
+      loadingContainer.style.display = 'block';
+      loadingContainer.classList.remove('fadeout');
+      loadingContainer.classList.add('visible');
+    } else {
+      // ローディング画面を非表示にする
+      const interval = setInterval(() => {
+        loadingContainer.classList.add('fadeout');
+        clearInterval(interval);
+      }, 500);
+
+      // アニメーション完了後に完全に非表示にする
+      loadingContainer.addEventListener('transitionend', (event) => {
+        if (event.target === loadingContainer) {
+          // 表示を完全に無効化してマウスイベントを通すようにする
+          loadingContainer.style.display = 'none';
+          loadingContainer.classList.remove('visible', 'fadeout');
+        }
+      }, { once: true }); // once: true で一度だけ実行
+    }
+
+  }
+
+
+  //
   // pathで指定されたCSVファイルを取得してパースする
+  //
   loadCsv = async (path) => {
     try {
       const response = await fetch(path);
@@ -400,6 +433,9 @@ export class Main {
   }
 
 
+  //
+  // CSVテキストをパースしてデータ配列を作成する
+  //
   parseCsv = (text) => {
     // 行に分割
     const lines = text.split('\n').filter(line => line.trim().length > 0);
@@ -467,14 +503,18 @@ export class Main {
   }
 
 
-  // normalizeDepthMapData()で行っている正規化をメソッド化
-  // Three.jsのZ軸の向きが手前方向なので、緯度方向はマイナスにする必要がある
-  // これでTopojsonの座標を正規化した場合、
-  // シェイプをXY平面からXZ平面に向きを変えるときに
-  //   geometry.rotateX(Math.PI / 2);
-  // という向きにしないと、地図が上下逆さまになる
+  //
+  // GPS座標を画面表示用に正規化する関数
   //
   normalizeCoordinates = ([lon, lat]) => {
+
+    // normalizeDepthMapData()で行っている正規化をメソッド化
+    // Three.jsのZ軸の向きが手前方向なので、緯度方向はマイナスにする必要がある
+    // これでTopojsonの座標を正規化した場合、
+    // シェイプをXY平面からXZ平面に向きを変えるときに
+    //   geometry.rotateX(Math.PI / 2);
+    // という向きにしないと、地図が上下逆さまになる
+
     const scale = this.params.xzScale;
     const centerLon = this.params.centerLon;
     const centerLat = this.params.centerLat;
@@ -485,7 +525,9 @@ export class Main {
   }
 
 
-  // normalizeDepthMapData()で行っている正規化の逆変換
+  //
+  // 正規化の逆変換
+  //
   inverseNormalizeCoordinates = (x, z) => {
     const scale = this.params.xzScale;
     const centerLon = this.params.centerLon;
@@ -497,6 +539,9 @@ export class Main {
   }
 
 
+  //
+  // GPSデータを画面表示用に正規化する
+  //
   normalizeDepthMapData = () => {
 
     // 緯度経度の中央値を取り出す
@@ -549,6 +594,10 @@ export class Main {
     // console.log(`normalizedMinLat: ${this.params.normalizedMinLat}\nnormalizedMaxLat: ${this.params.normalizedMaxLat}\nnormalizedMinLon: ${this.params.normalizedMinLon}\nnormalizedMaxLon: ${this.params.normalizedMaxLon}`);
   }
 
+
+  //
+  // pathで指定されたtopojsonファイルを取得する
+  //
   loadTopojson = async (path) => {
     try {
       const response = await fetch(path);
@@ -586,6 +635,9 @@ export class Main {
   }
 
 
+  //
+  // Three.jsの各コンポーネントを初期化
+  //
   initThreejs = () => {
 
     // Three.jsを表示するHTML要素
@@ -675,6 +727,9 @@ export class Main {
   }
 
 
+  //
+  // lil-guiを初期化
+  //
   initGui = () => {
     const guiContainer = document.getElementById("guiContainer");
 
@@ -824,6 +879,9 @@ export class Main {
   }
 
 
+  //
+  // stats.jsを初期化
+  //
   initStatsjs = () => {
     if (this.params.showStats === false) {
       return;
@@ -843,6 +901,9 @@ export class Main {
   }
 
 
+  //
+  // レンダリング処理
+  //
   render = () => {
     // 再帰処理
     this.renderParams.animationId = requestAnimationFrame(this.render);
@@ -878,6 +939,9 @@ export class Main {
   }
 
 
+  //
+  // アニメーションを停止
+  //
   stop = () => {
     if (this.renderParams.animationId) {
       cancelAnimationFrame(this.renderParams.animationId);
@@ -886,6 +950,9 @@ export class Main {
   }
 
 
+  //
+  // シーン上のメッシュを全て削除する
+  //
   clearScene = () => {
     const objectsToRemove = [];
 
@@ -912,6 +979,9 @@ export class Main {
   }
 
 
+  //
+  // ウィンドウリサイズ時の処理
+  //
   onWindowResize = (event) => {
     this.sizes.width = this.container.clientWidth;
     this.sizes.height = this.container.clientHeight;
@@ -927,7 +997,9 @@ export class Main {
   };
 
 
-  // 三角形が有効かどうかを判定する関数
+  //
+  // ドロネー三角形が有効かどうかを判定
+  //
   isValidTriangle = (posA, posB, posC) => {
     if (!this.params.enableDelaunayFilter) {
       return true;
@@ -955,7 +1027,9 @@ export class Main {
   }
 
 
+  //
   // CSVデータをもとにドロネー三角形でメッシュ化する
+  //
   initDelaunayFromCsv = () => {
 
     // 作成するポイントクラウドのリスト
@@ -1045,10 +1119,12 @@ export class Main {
   }
 
 
+  //
+  // 水深に応じた色の定義
+  //
   depthSteps = [
     -60, -55, -50, -45, -40, -35, -30, -25, -20, -16, -12, -10, -8, -6, -5, -4, -3, -2, -1,
   ];
-
 
   depthColors = {
     '-60': 0x2e146a,
@@ -1073,6 +1149,9 @@ export class Main {
   }
 
 
+  //
+  // 水深に応じた色を取得する関数
+  //
   getDepthColor = (depth) => {
     // depthStepsは深い順（-60から-1へ）にソートされているので
     // 深い順にループして、最初に depth <= step となる色を返す
@@ -1087,6 +1166,9 @@ export class Main {
   }
 
 
+  //
+  // 凡例を初期化
+  //
   initLegend = () => {
     const legendContainer = document.getElementById('legendContainer');
 
@@ -1122,6 +1204,9 @@ export class Main {
   }
 
 
+  //
+  // raycasterでフォーカスが当たっている場所の水深に応じて凡例をハイライト表示する
+  //
   updateLegendHighlight = (depth) => {
     this.clearLegendHighlight();
 
@@ -1142,9 +1227,7 @@ export class Main {
     if (legendItem) {
       legendItem.classList.add('highlight');
     }
-
   }
-
 
   clearLegendHighlight = () => {
     const highlightedItems = document.querySelectorAll('.highlight');
@@ -1152,6 +1235,9 @@ export class Main {
   }
 
 
+  //
+  // TopoJSONデータからThree.jsのShape配列を作成
+  //
   createShapesFromTopojson = (topojsonData, objectName) => {
 
     // Shapeを格納する配列
@@ -1257,6 +1343,9 @@ export class Main {
   }
 
 
+  //
+  // シェイプからメッシュを作成してシーンに追加
+  //
   createMeshFromShapes = (shapes) => {
 
     // ExtrudeGeometryで厚みを持たせる
@@ -1304,6 +1393,9 @@ export class Main {
   }
 
 
+  //
+  // マウスカーソル下の水深を表示
+  //
   renderDepth = () => {
     // 前フレーム時点でのマウス位置から変わっていないなら処理をスキップ
     if (this.mousePosition.equals(this.previousMousePosition)) {
@@ -1354,6 +1446,9 @@ export class Main {
   }
 
 
+  //
+  // 方位磁針を初期化
+  //
   initCompass = () => {
     // 方位磁針を表示するコンテナ要素
     this.compassContainer = document.getElementById('compassContainer');
@@ -1370,6 +1465,9 @@ export class Main {
   }
 
 
+  //
+  // 方位磁針をレンダリング
+  //
   renderCompass = () => {
     if (this.params.showCompass === false || !this.compassElement) {
       return;
@@ -1395,6 +1493,9 @@ export class Main {
   }
 
 
+  //
+  // ランドマークを初期化
+  //
   initLandmarks = () => {
     const LAYER = 1;  // ランドマークを表示するレイヤー
 
@@ -1446,6 +1547,9 @@ export class Main {
   }
 
 
+  //
+  // 縮尺を初期化
+  //
   initScale = () => {
     const LAYER = 2;  // 縮尺を表示するレイヤー
 
@@ -1488,7 +1592,6 @@ export class Main {
       cssObject.layers.set(LAYER);
       this.scene.add(cssObject);
     }
-
 
     // 縦線を追加
     {

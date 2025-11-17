@@ -1,14 +1,11 @@
+/*
+PythonでCSVデータを加工しているので、JavaScript側ではそれをそのまま利用します。
+デローネ三角形でメッシュを生成して海底地形図を描画します。
+*/
+
 import * as THREE from "three";
 import { OrbitControls } from "three/controls/OrbitControls.js";
 import { CSS2DRenderer, CSS2DObject } from 'three/libs/CSS2DRenderer.js';
-
-/*
-
-Pythonでデータを集約しているので、JavaScript側ではそのまま利用します。
-
-デローネ三角形でメッシュを生成します。
-
-*/
 
 // lil-gui
 import { GUI } from "three/libs/lil-gui.module.min.js";
