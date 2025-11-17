@@ -1,6 +1,6 @@
 /*
 PythonでCSVデータを加工しているので、JavaScript側ではそれをそのまま利用します。
-デローネ三角形でメッシュを生成して海底地形図を描画します。
+ドロネー図でメッシュを生成して海底地形図を描画します。
 */
 
 import * as THREE from "three";
@@ -18,20 +18,20 @@ import Delaunator from "delaunatorjs";
 
 /*
 import Delaunator from "delaunatorjs";
-を実現するには、ちょっと苦労がある。
+でインポートできるようにするには、ちょっと苦労があります。
 
 https://github.com/mapbox/delaunator
-ここからReleasesの最新版（2024年9月時点でv5.0.1）をダウンロードする。
-この中にindex.jsがあるので、これを使う。
+ここからReleasesの最新版（2024年9月時点でv5.0.1）をダウンロードします。
+この中にindex.jsがあるので、これを使います。
 
 delaunatorは内部でrobust-predicatesのorient2dを使っているため、
-orient2dが見つからないというエラーが発生する。
+orient2dが見つからないというエラーが発生します。
 
 https://github.com/mourner/robust-predicates
-ここからReleasesの最新版（2024年9月時点でv3.0.2）をダウンロードする。
-この中のsrcフォルダのjavascriptファイルをコピーして使う。
+ここからReleasesの最新版（2024年9月時点でv3.0.2）をダウンロードします。
+この中のsrcフォルダのjavascriptファイルをコピーして使います。
 
-static/libsはこのようなファイル配置にしている。
+./static/libsのファイル配置はこのようにしています。
 
 libs
 ├── delaunator-5.0.1
@@ -44,7 +44,7 @@ libs
 │   ├── predicates.min.js
 │   └── util.js
 
-HTMLではこのようなimportmapを使う。
+HTMLではこのようなimportmapを使います。
 
 <!-- three.js -->
 <script type="importmap">
@@ -81,7 +81,7 @@ export class Main {
   // 方位磁針を表示するHTML要素 <div id="compassContainer"></div>
   compassContainer;
 
-  // 方位磁針の画像要素 <div id="compass"></div>
+  // 方位磁針の画像を配置するHTML要素 <div id="compass"></div>
   compassElement;
 
   // Three.jsの各種インスタンス
@@ -122,16 +122,13 @@ export class Main {
   // 地形図のポイントクラウド（guiで表示を操作するためにインスタンス変数にする）
   pointMeshList = [];
 
-  // 変数
   // 地形図のメッシュのリスト（guiで表示を操作するためにインスタンス変数にする）
   terrainMeshList = [];
 
-
-  // 設定用パラメータ
-  // HTMLで上書き可能
+  // 設定用パラメータ（これらはデフォルト値で、HTMLで指定されたものがあれば上書きされる）
   params = {
 
-    // 利用可能なCSVファイルのリスト（HTMLで指定したもので上書きされる）
+    // 利用可能なCSVファイルのリスト
     availableDatasets: {
       'bathymetric_data': './static/data/bathymetric_data.csv',
     },
