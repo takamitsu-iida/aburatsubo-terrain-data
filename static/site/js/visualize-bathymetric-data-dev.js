@@ -827,7 +827,8 @@ export class Main {
         this.contourLineList.forEach((line) => {
           line.visible = this.params.showContourLines;
         });
-      }
+      },
+
     };
 
     displayFolder
@@ -850,7 +851,9 @@ export class Main {
       .add(displayParams, 'contourLines')
       .name(navigator.language.startsWith("ja") ? "等深線表示" : "Contour Lines");
 
+    //
     // ドロネー三角形に関するフィルタ処理
+    //
     const delaunayFolder = gui.addFolder(navigator.language.startsWith("ja") ? "ドロネー三角形" : "Delaunay Filter");
 
     delaunayFolder
