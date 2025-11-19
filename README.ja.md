@@ -48,9 +48,7 @@ Deeperのサブスクリプション会員になると3Dでマップが表示さ
 
 [Live Demo](https://takamitsu-iida.github.io/aburatsubo-terrain-data/index-bathymetric-data.html)
 
-<!--
 [Live Demo (開発中)](https://takamitsu-iida.github.io/aburatsubo-terrain-data/index-bathymetric-data-dev.html)
--->
 
 <br>
 
@@ -69,6 +67,12 @@ Deeperのサブスクリプション会員になると3Dでマップが表示さ
 **スクリーンショット** (メッシュ)
 
 ![mesh](/assets/screen_mesh.png)
+
+<br>
+
+**スクリーンショット** (等深線)
+
+<img src="/assets/screen_contour.png" width="640">
 
 <br>
 

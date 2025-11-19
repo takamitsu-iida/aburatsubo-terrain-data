@@ -125,6 +125,12 @@ export class Main {
   // 地形図のメッシュのリスト（guiで表示を操作するためにインスタンス変数にする）
   terrainMeshList = [];
 
+  // 等深線の線分を格納する配列
+  contourLineList = [];
+
+  // 等深線を描画する深さのリスト
+  contourTargetDepths = [-10.0, -20.0, -30.0, -40.0, -50.0];
+
   // 設定用パラメータ（これらはデフォルト値で、HTMLで指定されたものがあれば上書きされる）
   params = {
 
@@ -180,6 +186,9 @@ export class Main {
 
     // ワイヤーフレーム表示にする？
     wireframe: false,
+
+    // 等圧線を表示する？
+    showContourLines: true,
 
     // コントローラの設定
     autoRotate: false,
@@ -812,6 +821,13 @@ export class Main {
         this.params.showScale = !this.params.showScale;
         this.camera.layers.toggle(2);
       },
+
+      'contourLines': () => {
+        this.params.showContourLines = !this.params.showContourLines;
+        this.contourLineList.forEach((line) => {
+          line.visible = this.params.showContourLines;
+        });
+      }
     };
 
     displayFolder
@@ -829,6 +845,10 @@ export class Main {
     displayFolder
       .add(displayParams, 'scale')
       .name(navigator.language.startsWith("ja") ? "縮尺表示" : "Scale");
+
+    displayFolder
+      .add(displayParams, 'contourLines')
+      .name(navigator.language.startsWith("ja") ? "等深線表示" : "Contour Lines");
 
     // ドロネー三角形に関するフィルタ処理
     const delaunayFolder = gui.addFolder(navigator.language.startsWith("ja") ? "ドロネー三角形" : "Delaunay Filter");
@@ -1024,6 +1044,7 @@ export class Main {
   }
 
 
+
   //
   // CSVデータをもとにドロネー三角形でメッシュ化する
   //
@@ -1076,6 +1097,7 @@ export class Main {
     const terrainGeometry = new THREE.BufferGeometry().setFromPoints(positions);
     terrainGeometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
 
+    const contourLineList = [];
     const meshIndex = [];
     for (let i = 0; i < delaunay.triangles.length; i += 3) {
       const a = delaunay.triangles[i + 0];
@@ -1087,9 +1109,15 @@ export class Main {
       const posB = positions[b];
       const posC = positions[c];
 
-      // 三角形が有効かどうかを判定して、メッシュインデックスに追加
+      // 三角形が有効かどうかを判定
       if (this.isValidTriangle(posA, posB, posC)) {
+
+        // メッシュインデックスに追加
         meshIndex.push(a, b, c);
+
+        // 等深線を作成してリストに追加
+        const contourLines = this.createContourLines(posA, posB, posC);
+        contourLineList.push(...contourLines);
       }
     }
 
@@ -1107,12 +1135,77 @@ export class Main {
     this.scene.add(terrainMesh);
     terrainMeshList.push(terrainMesh);
 
+    // 等深線をシーンに追加
+    this.scene.add(...contourLineList);
+
     // 何個のポイントが表示されているかを表示
     document.getElementById('debugContainer').textContent = `${this.params.totalPointCount.toLocaleString()} points displayed`;
 
     // インスタンス変数に保存
     this.pointMeshList = pointMeshList;
     this.terrainMeshList = terrainMeshList;
+    this.contourLineList = contourLineList;
+
+  }
+
+
+  //
+  // 三角形の各辺と等深線の交点を計算して等深線を作成
+  //
+  createContourLines = (posA, posB, posC) => {
+
+    // THREE.Line()を格納するリスト
+    const contourLineList = [];
+
+    const minTriDepth = Math.min(posA.y, posB.y, posC.y);
+    const maxTriDepth = Math.max(posA.y, posB.y, posC.y);
+
+    for (let d = 0; d < this.contourTargetDepths.length; d++) {
+      const targetDepth = this.contourTargetDepths[d];
+      if (targetDepth >= minTriDepth && targetDepth <= maxTriDepth) {
+        // 三角形の各辺で等深線との交点を探す
+        const intersections = [];
+        // 辺AB
+        if ((posA.y - targetDepth) * (posB.y - targetDepth) < 0) {
+          const t = (targetDepth - posA.y) / (posB.y - posA.y);
+          intersections.push(new THREE.Vector3(
+            posA.x + t * (posB.x - posA.x),
+            targetDepth,
+            posA.z + t * (posB.z - posA.z)
+          ));
+        }
+        // 辺BC
+        if ((posB.y - targetDepth) * (posC.y - targetDepth) < 0) {
+          const t = (targetDepth - posB.y) / (posC.y - posB.y);
+          intersections.push(new THREE.Vector3(
+            posB.x + t * (posC.x - posB.x),
+            targetDepth,
+            posB.z + t * (posC.z - posB.z)
+          ));
+        }
+        // 辺CA
+        if ((posC.y - targetDepth) * (posA.y - targetDepth) < 0) {
+          const t = (targetDepth - posC.y) / (posA.y - posC.y);
+          intersections.push(new THREE.Vector3(
+            posC.x + t * (posA.x - posC.x),
+            targetDepth,
+            posC.z + t * (posA.z - posC.z)
+          ));
+        }
+
+        // 2つの交点があれば線分を作成
+        if (intersections.length === 2) {
+          const geometry = new THREE.BufferGeometry().setFromPoints(intersections);
+          const color = this.getDepthColor(targetDepth);
+          const material = new THREE.LineBasicMaterial({ color: color });
+          const line = new THREE.Line(geometry, material);
+          line.visible = this.params.showContourLines;
+          contourLineList.push(line);
+        }
+      }
+    }
+
+    return contourLineList;
   }
 
 
