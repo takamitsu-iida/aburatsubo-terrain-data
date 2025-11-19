@@ -324,6 +324,8 @@
       ];
 
       // const currentDataset = 'quadtree_data';
+      // const currentDataset = 'kriging_data';
+      // const currentDataset = 'de_dd_ol_ip';
       const currentDataset = 'de_dd_ol_ip_mf';
       const availableDatasets = {
           'quadtree_data': './data/quadtree_data.csv',
@@ -333,10 +335,9 @@
       };
 
       const params = {
-        // データセット
         currentDataset: currentDataset,
         availableDatasets: availableDatasets,
-        landmarks: landmarks,  // default []
+        landmarks: landmarks,
         guiClosed: false,  // GUIをクローズド状態で開始する
         wireframe: false,
         autoRotate: false,
@@ -345,6 +346,7 @@
         showScale: true,
         showCompass: true,
         showStats: true,
+        showContourLines: true,
         enableTriangleFilter: true,  // ドロネー三角形の辺の長さに制限を付ける場合はtrue
       };
 
