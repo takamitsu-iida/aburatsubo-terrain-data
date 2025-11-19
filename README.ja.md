@@ -54,25 +54,25 @@ Deeperのサブスクリプション会員になると3Dでマップが表示さ
 
 **スクリーンショット** (ポイントクラウド)
 
-<img src="/assets/screen_point_cloud.png" width="640" height="640">
+<img src="/assets/screen_point_cloud.png" width="640"/>
 
 <br>
 
 **スクリーンショット** (ワイヤフレーム)
 
-<img src="/assets/screen_wireframe.png" width="640">
+<img src="/assets/screen_wireframe.png" width="640"/>
 
 <br>
 
 **スクリーンショット** (メッシュ)
 
-<img src="/assets/screen_mesh.png" width="640">
+<img src="/assets/screen_mesh.png" width="640"/>
 
 <br>
 
 **スクリーンショット** (等深線)
 
-<img src="/assets/screen_contour.png" width="640">
+<img src="/assets/screen_contour.png" width="640"/>
 
 <br>
 
