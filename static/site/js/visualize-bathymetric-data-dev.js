@@ -1378,7 +1378,7 @@ export class Main {
         new THREE.Plane(new THREE.Vector3(0, 0, -1), clippingSize * 2),  // Z座標が-xzGridSize * 2以上を表示
         new THREE.Plane(new THREE.Vector3(-1, 0, 0), clippingSize),      // X座標がxzGridSize以下を表示
         new THREE.Plane(new THREE.Vector3(1, 0, 0), clippingSize),       // X座標が-xzGridSize以上を表示
-        new THREE.Plane(new THREE.Vector3(0, 1, 0), 0),                  // Y座標が0以上を表示、水面(Y=0より下)を消す
+        new THREE.Plane(new THREE.Vector3(0, 1, 0), 0),                  // Y座標が0以上だけ表示する
       ],
     });
 
