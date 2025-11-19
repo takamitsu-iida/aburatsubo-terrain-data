@@ -306,6 +306,11 @@
 
 <script type="module">
   import WebGL from './static/libs/capabilities/WebGL.js';
+
+  // For stable version
+  // import { Main } from "./static/site/js/visualize-bathymetric-data.js";
+
+  // For development/debugging
   import { Main } from "./static/site/js/visualize-bathymetric-data.js";
 
   window.addEventListener("load", () => {
@@ -318,9 +323,19 @@
         { lon: 139.61595853, lat: 35.15950000, depth: 0, name_ja: '油壷湾', name: 'Aburatsubo' },
       ];
 
+      // const currentDataset = 'quadtree_data';
+      const currentDataset = 'de_dd_ol_ip_mf';
+      const availableDatasets = {
+          'quadtree_data': './data/quadtree_data.csv',
+          'kriging_data': './data/kriging_data.csv',
+          'de_dd_ol_ip': './data/ALL_depth_map_data_202510_de_dd_ol_ip.csv',
+          'de_dd_ol_ip_mf': './data/ALL_depth_map_data_202510_de_dd_ol_ip_mf.csv'
+      };
+
       const params = {
-        // 水深データのCSVファイルのURL
-        depthMapPath: "./static/data/bathymetric_data.csv",
+        // データセット
+        currentDataset: currentDataset,
+        availableDatasets: availableDatasets,
         landmarks: landmarks,  // default []
         guiClosed: true,  // GUIをクローズド状態で開始する
         wireframe: false,

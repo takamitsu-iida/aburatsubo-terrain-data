@@ -3,6 +3,11 @@
 このファイルは不要なコードの削除を行ったバージョンなので古いです。
 */
 
+/*
+PythonでCSVデータを加工しているので、JavaScript側ではそれをそのまま利用します。
+ドロネー図でメッシュを生成して海底地形図を描画します。
+*/
+
 import * as THREE from "three";
 import { OrbitControls } from "three/controls/OrbitControls.js";
 import { CSS2DRenderer, CSS2DObject } from 'three/libs/CSS2DRenderer.js';
@@ -13,25 +18,38 @@ import { GUI } from "three/libs/lil-gui.module.min.js";
 // stats.js
 import Stats from "three/libs/stats.module.js";
 
-// デローネ三角形
+// ドロネー三角形
 import Delaunator from "delaunatorjs";
 
 /*
 import Delaunator from "delaunatorjs";
-を実現するには、ちょっと苦労がある。
+でインポートできるようにするには、ちょっと苦労があります。
 
 https://github.com/mapbox/delaunator
-ここからReleasesの最新版（2024年9月時点でv5.0.1）をダウンロードする。
-この中にindex.jsがあるので、これを使う。
+ここからReleasesの最新版（2024年9月時点でv5.0.1）をダウンロードします。
+この中にindex.jsがあるので、これを使います。
 
 delaunatorは内部でrobust-predicatesのorient2dを使っているため、
-orient2dが見つからないというエラーが発生する。
+orient2dが見つからないというエラーが発生します。
 
 https://github.com/mourner/robust-predicates
-ここからReleasesの最新版（2024年9月時点でv3.0.2）をダウンロードする。
-この中のsrcフォルダのjavascriptファイルをコピーして使う。
+ここからReleasesの最新版（2024年9月時点でv3.0.2）をダウンロードします。
+この中のsrcフォルダのjavascriptファイルをコピーして使います。
 
-HTMLではこのようなimportmapを使う。
+./static/libsのファイル配置はこのようにしています。
+
+libs
+├── delaunator-5.0.1
+│   └── index.js
+├── robust-predicates-3.0.2
+│   ├── incircle.js
+│   ├── insphere.js
+│   ├── orient2d.js
+│   ├── orient3d.js
+│   ├── predicates.min.js
+│   └── util.js
+
+HTMLではこのようなimportmapを使います。
 
 <!-- three.js -->
 <script type="importmap">
@@ -45,6 +63,7 @@ HTMLではこのようなimportmapを使う。
     }
   }
 </script>
+
 */
 
 export class Main {
@@ -58,14 +77,16 @@ export class Main {
     height: 0
   }
 
-  // 水深を表示するHTML要素
+  // 水深を表示するHTML要素 <div id="depthContainer"></div>
   depthContainer;
 
-  // 緯度経度を表示するHTML要素
+  // 緯度経度を表示するHTML要素 <div id="coordinatesContainer"></div>
   coordinatesContainer;
 
-  // 方位磁針を表示するHTML要素
+  // 方位磁針を表示するHTML要素 <div id="compassContainer"></div>
   compassContainer;
+
+  // 方位磁針の画像を配置するHTML要素 <div id="compass"></div>
   compassElement;
 
   // Three.jsの各種インスタンス
@@ -103,7 +124,31 @@ export class Main {
     interval: 1 / 30,  // = 30fps
   }
 
+  // 地形図のポイントクラウド（guiで表示を操作するためにインスタンス変数にする）
+  pointMeshList = [];
+
+  // 地形図のメッシュのリスト（guiで表示を操作するためにインスタンス変数にする）
+  terrainMeshList = [];
+
+  // 設定用パラメータ（これらはデフォルト値で、HTMLで指定されたものがあれば上書きされる）
   params = {
+
+    // 利用可能なCSVファイルのリスト
+    availableDatasets: {
+      'bathymetric_data': './static/data/bathymetric_data.csv',
+    },
+
+    // 現在選択されているデータセット名
+    currentDataset: 'bathymetric_data',
+
+    // 海岸線のデータを加えるか？
+    showCoastLine: true,
+
+    // 海岸線のデータ
+    coastLineDataset: './static/data/coastline.csv',
+
+    // ファイルをローディングしている状態かどうか
+    isLoading: false,
 
     // 海底地形図の(lon, lat)をThree.jsのXZ座標のどの範囲に描画するか
     // 持っているGPSデータに応じて調整する
@@ -111,9 +156,6 @@ export class Main {
 
     // xzGridSizeにあわせるために、どのくらい緯度経度の値を拡大するか（自動で計算する）
     xzScale: 10000,  // これは仮の値で、CSVデータを読み込んだ後に正規化する
-
-    // 水深データのCSVファイルのURL（html側で指定する）
-    depthMapPath: "",
 
     // CSVテキストをパースして作成するデータ配列
     // 画面表示に適した値に正規化するのでCSVの値とは異なることに注意
@@ -128,9 +170,6 @@ export class Main {
 
     // topojsonデータに含まれるobjectName（三浦市のデータなら"miura"）
     topojsonObjectName: "miura",
-
-    // topojsonを変換してGeoJSONデータにしたもの（いまは未使用）
-    geojsonData: null,
 
     // guiをクローズド状態で開始するか？
     guiClosed: false,
@@ -185,31 +224,44 @@ export class Main {
     showCompass: true,
 
     // stats.jsを表示する？
-    showStats: false,
+    showStats: true,
 
-    // デローネ三角形のフィルタリングパラメータ
+    // ドロネー三角形のフィルタリングパラメータ
     enableDelaunayFilter: true,
-    maxTriangleEdgeLength: 20,  // エッジの最大長さ 画面サイズxzGridSizeが200の場合の初期値
+
+    // エッジの最大長さ 画面サイズxzGridSizeが200の場合の初期値 200の10%に相当
+    maxTriangleEdgeLength: 20,
   }
 
-  // 地形図のポイントクラウド（guiで表示を操作するためにインスタンス変数にする）
-  pointMeshList;
 
-  // 地形図のメッシュのリスト（guiで表示を操作するためにインスタンス変数にする）
-  terrainMeshList = [];
-
+  //
+  // コンストラクタ
+  //
   constructor(params = {}) {
+     // paramsを受け取って上記のparamsを上書きする
     this.params = Object.assign(this.params, params);
+
+    // 初期化処理
     this.init();
   }
 
 
+  //
+  // 初期化処理
+  //
   init = async () => {
+
+    // 取得するデータのパスを取得
+    const dataPath = this.params.availableDatasets[this.params.currentDataset];
+
     // データを読み込む
     await Promise.all([
-      this.loadCsv(this.params.depthMapPath),
+      this.loadCsv(dataPath),
       this.loadTopojson(this.params.topojsonPath)
     ]);
+
+    // 初期状態で表示されているローディング状態を非表示にする(50ms待機してからフェードアウト)
+    this.showLoadingIndicator(false);
 
     if (this.params.depthMapData === null) {
       return;
@@ -219,21 +271,7 @@ export class Main {
       return;
     }
 
-    // データをダウンロードしている間、ローディング画面を表示する
-    // 瞬時にfetchできても0.5秒はローディング画面を表示する
-    const loadingContainer = document.getElementById('loadingContainer');
-
-    const interval = setInterval(() => {
-      loadingContainer.classList.add('fadeout');
-      clearInterval(interval);
-    }, 500);
-
-    // ローディング画面を非表示にする
-    loadingContainer.addEventListener('transitionend', (event) => {
-      event.target.remove();
-    });
-
-    // 緯度経度の値を正規化する
+    // 緯度経度の値を画面表示用に正規化する
     this.normalizeDepthMapData();
 
     // scene, camera, renderer, controllerを初期化
@@ -253,6 +291,9 @@ export class Main {
   }
 
 
+  //
+  // コンテンツを初期化
+  //
   initContents = () => {
     // アニメーションを停止
     this.stop();
@@ -263,10 +304,10 @@ export class Main {
     // 全てを削除した状態で描画
     this.renderer.render(this.scene, this.camera);
 
-    // CSVデータをそのまま使ってデローネ三角形でメッシュ化する
+    // CSVデータをドロネー三角形でメッシュ化する
     this.initDelaunayFromCsv();
 
-    // topojsonデータからシェイプを作成
+    // topojsonデータから地図のシェイプを作成
     const shapes = this.createShapesFromTopojson(this.params.topojsonData, this.params.topojsonObjectName);
 
     // シェイプの配列からメッシュを作成
@@ -286,6 +327,78 @@ export class Main {
   }
 
 
+  //
+  // データセットを切り替えて初期化する
+  //
+  switchDataset = async (datasetName) => {
+    if (this.params.isLoading) {
+      return;
+    }
+
+    // ローディング状態を表示
+    this.showLoadingIndicator(true);
+
+    try {
+      // プリセットファイル
+      let dataPath = this.params.availableDatasets[datasetName];
+
+      // CSVデータをロード
+      await this.loadCsv(dataPath);
+
+      // データを正規化
+      this.normalizeDepthMapData();
+
+      // 現在のデータセット名を更新
+      this.params.currentDataset = datasetName;
+
+      // コンテンツを再初期化
+      this.initContents();
+
+    } catch (error) {
+      console.error(`Error switching dataset: ${error}`);
+    } finally {
+      // ローディング状態を非表示
+      this.showLoadingIndicator(false);
+    }
+  }
+
+
+  //
+  // ローディングインジケータの表示/非表示
+  //
+  showLoadingIndicator = (show) => {
+    this.params.isLoading = show;
+
+    const loadingContainer = document.getElementById('loadingContainer');
+
+    if (show) {
+      // ローディング画面を表示
+      loadingContainer.style.display = 'block';
+      loadingContainer.classList.remove('fadeout');
+      loadingContainer.classList.add('visible');
+    } else {
+      // ローディング画面を非表示にする
+      const interval = setInterval(() => {
+        loadingContainer.classList.add('fadeout');
+        clearInterval(interval);
+      }, 500);
+
+      // アニメーション完了後に完全に非表示にする
+      loadingContainer.addEventListener('transitionend', (event) => {
+        if (event.target === loadingContainer) {
+          // 表示を完全に無効化してマウスイベントを通すようにする
+          loadingContainer.style.display = 'none';
+          loadingContainer.classList.remove('visible', 'fadeout');
+        }
+      }, { once: true }); // once: true で一度だけ実行
+    }
+
+  }
+
+
+  //
+  // pathで指定されたCSVファイルを取得してパースする
+  //
   loadCsv = async (path) => {
     try {
       const response = await fetch(path);
@@ -294,7 +407,19 @@ export class Main {
       }
 
       // テキストデータを取得
-      const text = await response.text();
+      let text = await response.text();
+
+      // 海岸線データを取得する
+      if (this.params.showCoastLine) {
+        const coastLineResponse = await fetch(this.params.coastLineDataset);
+        if (!coastLineResponse.ok) {
+          throw new Error(`HTTP status: ${coastLineResponse.status}`);
+        }
+        const coastLineText = await coastLineResponse.text();
+
+        // 既存のテキストデータに結合
+        text += '\n' + coastLineText;
+      }
 
       // CSVのテキストデータをパース
       this.params.depthMapData = this.parseCsv(text);
@@ -310,6 +435,9 @@ export class Main {
   }
 
 
+  //
+  // CSVテキストをパースしてデータ配列を作成する
+  //
   parseCsv = (text) => {
     // 行に分割
     const lines = text.split('\n').filter(line => line.trim().length > 0);
@@ -377,25 +505,31 @@ export class Main {
   }
 
 
-  // normalizeDepthMapData()で行っている正規化をメソッド化
-  // Three.jsのZ軸の向きが手前方向なので、緯度方向はマイナスにする必要がある
-  // これでTopojsonの座標を正規化した場合、
-  // シェイプをXY平面からXZ平面に向きを変えるときに
-  //   geometry.rotateX(Math.PI / 2);
-  // という向きにしないと、地図が上下逆さまになる
+  //
+  // GPS座標を画面表示用に正規化する関数
   //
   normalizeCoordinates = ([lon, lat]) => {
+
+    // normalizeDepthMapData()で行っている正規化をメソッド化
+    // Three.jsのZ軸の向きが手前方向なので、緯度方向はマイナスにする必要がある
+    // これでTopojsonの座標を正規化した場合、
+    // シェイプをXY平面からXZ平面に向きを変えるときに
+    //   geometry.rotateX(Math.PI / 2);
+    // という向きにしないと、地図が上下逆さまになる
+
     const scale = this.params.xzScale;
     const centerLon = this.params.centerLon;
     const centerLat = this.params.centerLat;
     return [
-      (lon - centerLon) * scale,
-      -1 * (lat - centerLat) * scale
+      (lon - centerLon) * scale,      // X軸: 経度を中心から相対座標に変換し、スケール適用
+      -1 * (lat - centerLat) * scale  // Z軸: 緯度を中心から相対座標に変換し、マイナスをかけてスケール適用（Z軸が手前向きのため）
     ];
   }
 
 
-  // normalizeDepthMapData()で行っている正規化の逆変換
+  //
+  // 正規化の逆変換
+  //
   inverseNormalizeCoordinates = (x, z) => {
     const scale = this.params.xzScale;
     const centerLon = this.params.centerLon;
@@ -407,6 +541,9 @@ export class Main {
   }
 
 
+  //
+  // GPSデータを画面表示用に正規化する
+  //
   normalizeDepthMapData = () => {
 
     // 緯度経度の中央値を取り出す
@@ -460,6 +597,9 @@ export class Main {
   }
 
 
+  //
+  // pathで指定されたtopojsonファイルを取得する
+  //
   loadTopojson = async (path) => {
     try {
       const response = await fetch(path);
@@ -497,6 +637,9 @@ export class Main {
   }
 
 
+  //
+  // Three.jsの各コンポーネントを初期化
+  //
   initThreejs = () => {
 
     // Three.jsを表示するHTML要素
@@ -515,8 +658,9 @@ export class Main {
     // resizeイベントのハンドラを登録
     window.addEventListener("resize", this.onWindowResize, false);
 
-    // シーン
+    // シーン、背景色はデフォルトの黒を明示的に指定
     this.scene = new THREE.Scene();
+    this.scene.background = new THREE.Color(0x000000);
 
     // カメラ
     this.camera = new THREE.PerspectiveCamera(
@@ -525,7 +669,7 @@ export class Main {
       1,
       1000
     );
-    this.camera.position.set(0, 100, 100);
+    this.camera.position.set(0, this.params.xzGridSize / 2.0, this.params.xzGridSize / 2.0);
 
     // レイヤを設定
     this.camera.layers.enable(0); // enabled by default
@@ -533,10 +677,7 @@ export class Main {
     this.camera.layers.enable(2); // 2: scale
 
     // レンダラ
-    this.renderer = new THREE.WebGLRenderer({
-      antialias: true,
-    });
-
+    this.renderer = new THREE.WebGLRenderer({antialias: true});
     this.renderer.setSize(this.sizes.width, this.sizes.height);
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 
@@ -559,8 +700,7 @@ export class Main {
     //   /
     //  Z(blue)
     //
-    const xzGridSize = this.params.xzGridSize;
-    const axesHelper = new THREE.AxesHelper(xzGridSize);
+    const axesHelper = new THREE.AxesHelper(this.params.xzGridSize);
     this.scene.add(axesHelper);
 
     // 環境光
@@ -589,8 +729,12 @@ export class Main {
   }
 
 
+  //
+  // lil-guiを初期化
+  //
   initGui = () => {
     const guiContainer = document.getElementById("guiContainer");
+
     const gui = new GUI({
       container: guiContainer,
       width: 300,
@@ -605,13 +749,11 @@ export class Main {
 
     // 一度だけ実行するための関数
     const doLater = (job, tmo) => {
-
       // 処理が登録されているならタイマーをキャンセル
       var tid = doLater.TID[job];
       if (tid) {
         window.clearTimeout(tid);
       }
-
       // タイムアウト登録する
       doLater.TID[job] = window.setTimeout(() => {
         // 実行前にタイマーIDをクリア
@@ -624,28 +766,31 @@ export class Main {
     // 処理からタイマーIDへのハッシュ
     doLater.TID = {};
 
-    gui
+    // 表示切り替えフォルダ
+    const displayFolder = gui.addFolder(navigator.language.startsWith("ja") ? "表示切り替え" : "Display");
+
+    displayFolder
       .add(this.params, "autoRotate")
-      .name(navigator.language.startsWith("ja") ? "自動回転" : "rotation")
+      .name(navigator.language.startsWith("ja") ? "自動回転" : "Auto Rotate")
       .onChange((value) => {
         this.controller.autoRotate = value;
       });
 
-    gui
+    displayFolder
       .add(this.params, "pointSize")
-      .name(navigator.language.startsWith("ja") ? "ポイントサイズ" : "pointSize")
+      .name(navigator.language.startsWith("ja") ? "ポイントサイズ" : "Point Size")
       .min(0.1)
       .max(1.0)
       .step(0.1)
       .onChange((value) => {
-        this.pointMeshList.forEach((pointMesh) => {
-          pointMesh.material.size = value;
-        });
+        doLater(() => {
+          this.pointMeshList.forEach((pointMesh) => {
+            pointMesh.material.size = value;
+          });
+        }, 250);
       });
 
-    const displayFolder = gui.addFolder(navigator.language.startsWith("ja") ? "表示切り替え" : "Display");
-
-    const displayParams = {
+      const displayParams = {
       'wireframe': () => {
         this.params.wireframe = !this.params.wireframe;
         this.terrainMeshList.forEach((terrainMesh) => {
@@ -657,6 +802,9 @@ export class Main {
         this.params.showPointCloud = !this.params.showPointCloud;
         this.pointMeshList.forEach((pointMesh) => {
           pointMesh.visible = this.params.showPointCloud;
+        });
+        this.terrainMeshList.forEach((terrainMesh) => {
+          terrainMesh.visible = !this.params.showPointCloud;
         });
       },
 
@@ -673,21 +821,22 @@ export class Main {
 
     displayFolder
       .add(displayParams, "wireframe")
-      .name(navigator.language.startsWith("ja") ? "ワイヤーフレーム表示" : "wireframe");
+      .name(navigator.language.startsWith("ja") ? "ワイヤーフレーム表示" : "Wireframe");
 
     displayFolder
       .add(displayParams, "pointCloud")
-      .name(navigator.language.startsWith("ja") ? "ポイントクラウド表示" : "showPointCloud");
+      .name(navigator.language.startsWith("ja") ? "ポイントクラウド表示" : "Point cloud");
 
     displayFolder
       .add(displayParams, 'landmark')
-      .name(navigator.language.startsWith("ja") ? "ランドマーク表示" : "show landmark");
+      .name(navigator.language.startsWith("ja") ? "ランドマーク表示" : "Landmark");
 
     displayFolder
       .add(displayParams, 'scale')
-      .name(navigator.language.startsWith("ja") ? "縮尺表示" : "show scale");
+      .name(navigator.language.startsWith("ja") ? "縮尺表示" : "Scale");
 
-    const delaunayFolder = gui.addFolder(navigator.language.startsWith("ja") ? "デローネ" : "Delaunay");
+    // ドロネー三角形に関するフィルタ処理
+    const delaunayFolder = gui.addFolder(navigator.language.startsWith("ja") ? "ドロネー三角形" : "Delaunay Filter");
 
     delaunayFolder
       .add(this.params, "enableDelaunayFilter")
@@ -699,17 +848,42 @@ export class Main {
     delaunayFolder
       .add(this.params, "maxTriangleEdgeLength")
       .name(navigator.language.startsWith("ja") ? "最大辺長" : "Max Edge Length")
-      .min(5)
-      .max(50)
+      .min(this.params.xzGridSize * 0.025)
+      .max(this.params.xzGridSize * 0.25)
       .step(1)
       .onChange(() => {
-        this.initContents(); // メッシュを再構築
+        doLater(() => {
+          this.initContents(); // メッシュを再構築
+        }, 250);
       });
 
+    // データセット選択フォルダ
+    const dataFolder = gui.addFolder(navigator.language.startsWith("ja") ? "データセット" : "Dataset");
+
+    // プリセットデータセットの選択
+    dataFolder
+      .add(this.params, "currentDataset", Object.keys(this.params.availableDatasets))
+      .name(navigator.language.startsWith("ja") ? "プリセット" : "Preset")
+      .onChange((value) => {
+        this.switchDataset(value);
+      });
+
+
+    // 海岸線データを使うかどうか
+    const coastlineFolder = gui.addFolder(navigator.language.startsWith("ja") ? "海岸線" : "Coastline");
+    coastlineFolder
+      .add(this.params, "showCoastLine")
+      .name(navigator.language.startsWith("ja") ? "海岸線データ" : "Coastline Data")
+      .onChange(() => {
+        this.switchDataset(this.params.currentDataset);
+      });
 
   }
 
 
+  //
+  // stats.jsを初期化
+  //
   initStatsjs = () => {
     if (this.params.showStats === false) {
       return;
@@ -729,6 +903,9 @@ export class Main {
   }
 
 
+  //
+  // レンダリング処理
+  //
   render = () => {
     // 再帰処理
     this.renderParams.animationId = requestAnimationFrame(this.render);
@@ -764,6 +941,9 @@ export class Main {
   }
 
 
+  //
+  // アニメーションを停止
+  //
   stop = () => {
     if (this.renderParams.animationId) {
       cancelAnimationFrame(this.renderParams.animationId);
@@ -772,6 +952,9 @@ export class Main {
   }
 
 
+  //
+  // シーン上のメッシュを全て削除する
+  //
   clearScene = () => {
     const objectsToRemove = [];
 
@@ -798,6 +981,9 @@ export class Main {
   }
 
 
+  //
+  // ウィンドウリサイズ時の処理
+  //
   onWindowResize = (event) => {
     this.sizes.width = this.container.clientWidth;
     this.sizes.height = this.container.clientHeight;
@@ -813,20 +999,9 @@ export class Main {
   };
 
 
-  splitPointsByCluster = (data) => {
-    const clusters = {};
-    data.forEach(point => {
-      const clusterId = point.cluster;
-      if (!clusters[clusterId]) clusters[clusterId] = [];
-      clusters[clusterId].push(point);
-    });
-
-    // クラスタごとの配列リストを返す
-    return Object.values(clusters);
-  }
-
-
-  // 三角形が有効かどうかを判定する関数
+  //
+  // ドロネー三角形が有効かどうかを判定
+  //
   isValidTriangle = (posA, posB, posC) => {
     if (!this.params.enableDelaunayFilter) {
       return true;
@@ -854,7 +1029,9 @@ export class Main {
   }
 
 
-  // CSVデータを使ってデローネ三角形でメッシュ化する
+  //
+  // CSVデータをもとにドロネー三角形でメッシュ化する
+  //
   initDelaunayFromCsv = () => {
 
     // 作成するポイントクラウドのリスト
@@ -863,78 +1040,77 @@ export class Main {
     // 作成するメッシュのリスト
     const terrainMeshList = [];
 
-    // CSVデータをそのまま使う
+    // 表示用に正規化したデータ
     const data = this.params.depthMapData;
 
-    // dataをクラスタごとに分解する
-    const clusteredData = this.splitPointsByCluster(data);
+    // Three.jsのVector3配列を作成してデータを格納する
+    const positions = [];
+    const colors = [];
 
-    // クラスタごとにデローネ三角形でメッシュを作成
-    clusteredData.forEach(cluster => {
-
-      // Three.jsのVector3配列を作成して、データを格納する
-      const positions = [];
-      const colors = [];
-      cluster.forEach(point => {
-        // lon: X, lat: Z, depth: Y
-        positions.push(new THREE.Vector3(point.lon, point.depth, point.lat));
-        const color = this.getDepthColor(point.depth);
-        colors.push(color.r, color.g, color.b);
-      });
-
-      // ポイントクラウドのジオメトリを作成
-      const geometry = new THREE.BufferGeometry().setFromPoints(positions);
-      geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
-
-      // マテリアルを作成
-      const pointsMaterial = new THREE.PointsMaterial({
-        color: 0x99ccff,
-        size: this.params.pointSize,
-      });
-
-      // 点群を作成
-      const pointMesh = new THREE.Points(geometry, pointsMaterial);
-      pointMesh.visible = this.params.showPointCloud;
-      this.scene.add(pointMesh);
-      pointMeshList.push(pointMesh);
-
-      const delaunay = Delaunator.from(
-        positions.map(v => [v.x, v.z])
-      );
-
-      const meshIndex = [];
-
-      for (let i = 0; i < delaunay.triangles.length; i += 3) {
-        const a = delaunay.triangles[i + 0];
-        const b = delaunay.triangles[i + 1];
-        const c = delaunay.triangles[i + 2];
-
-        // ADDED
-        // 三角形の各頂点を取得
-        const posA = positions[a];
-        const posB = positions[b];
-        const posC = positions[c];
-        // 三角形が有効かどうかを判定
-        if (this.isValidTriangle(posA, posB, posC)) {
-          meshIndex.push(a, b, c);
-        }
-
-        // meshIndex.push(a, b, c);
-      }
-      geometry.setIndex(meshIndex);
-      geometry.computeVertexNormals();
-
-      // メッシュマテリアル
-      const material = new THREE.MeshLambertMaterial({
-        vertexColors: true,
-        wireframe: this.params.wireframe,
-      });
-
-      // メッシュを生成
-      const terrainMesh = new THREE.Mesh(geometry, material);
-      this.scene.add(terrainMesh);
-      terrainMeshList.push(terrainMesh);
+    // データをループしてpositionsとcolorsに格納する
+    data.forEach(point => {
+      // lon: X, lat: Z, depth: Y
+      positions.push(new THREE.Vector3(point.lon, point.depth, point.lat));
+      const color = this.getDepthColor(point.depth);
+      colors.push(color.r, color.g, color.b);
     });
+
+    // ポイントクラウドのジオメトリを作成
+    const pointGeometry = new THREE.BufferGeometry().setFromPoints(positions);
+    pointGeometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+
+    // ポイントクラウド用のマテリアルを作成
+    const pointsMaterial = new THREE.PointsMaterial({
+      // color: 0x99ccff,
+      vertexColors: true,
+      size: this.params.pointSize,
+    });
+
+    // 点群を作成してシーンに追加
+    const pointMesh = new THREE.Points(pointGeometry, pointsMaterial);
+    pointMesh.visible = this.params.showPointCloud;
+    this.scene.add(pointMesh);
+    pointMeshList.push(pointMesh);
+
+    // ドロネー三角形を作成
+    const delaunay = Delaunator.from(
+      positions.map(v => [v.x, v.z])
+    );
+
+    // 地形メッシュ用のジオメトリを作成
+    const terrainGeometry = new THREE.BufferGeometry().setFromPoints(positions);
+    terrainGeometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+
+    const meshIndex = [];
+    for (let i = 0; i < delaunay.triangles.length; i += 3) {
+      const a = delaunay.triangles[i + 0];
+      const b = delaunay.triangles[i + 1];
+      const c = delaunay.triangles[i + 2];
+
+      // 三角形の各頂点を取得
+      const posA = positions[a];
+      const posB = positions[b];
+      const posC = positions[c];
+
+      // 三角形が有効かどうかを判定して、メッシュインデックスに追加
+      if (this.isValidTriangle(posA, posB, posC)) {
+        meshIndex.push(a, b, c);
+      }
+    }
+
+    terrainGeometry.setIndex(meshIndex);
+    terrainGeometry.computeVertexNormals();
+
+    // 地形メッシュ用のマテリアルを作成
+    const terrainMaterial = new THREE.MeshLambertMaterial({
+      vertexColors: true,
+      wireframe: this.params.wireframe,
+    });
+
+    // メッシュを生成してシーンに追加
+    const terrainMesh = new THREE.Mesh(terrainGeometry, terrainMaterial);
+    this.scene.add(terrainMesh);
+    terrainMeshList.push(terrainMesh);
 
     // 何個のポイントが表示されているかを表示
     document.getElementById('debugContainer').textContent = `${this.params.totalPointCount.toLocaleString()} points displayed`;
@@ -945,10 +1121,12 @@ export class Main {
   }
 
 
+  //
+  // 水深に応じた色の定義
+  //
   depthSteps = [
     -60, -55, -50, -45, -40, -35, -30, -25, -20, -16, -12, -10, -8, -6, -5, -4, -3, -2, -1,
   ];
-
 
   depthColors = {
     '-60': 0x2e146a,
@@ -973,18 +1151,26 @@ export class Main {
   }
 
 
+  //
+  // 水深に応じた色を取得する関数
+  //
   getDepthColor = (depth) => {
-    const depthSteps = this.depthSteps;
-    const depthColors = this.depthColors;
-    for (let i = 0; i < depthSteps.length; i++) {
-      if (depth <= depthSteps[i]) {
-        return new THREE.Color(depthColors[depthSteps[i]]);
+    // depthStepsは深い順（-60から-1へ）にソートされているので
+    // 深い順にループして、最初に depth <= step となる色を返す
+    for (let i = 0; i < this.depthSteps.length; i++) {
+      if (depth <= this.depthSteps[i]) {
+        return new THREE.Color(this.depthColors[this.depthSteps[i]]);
       }
     }
-    return new THREE.Color(depthColors[depthSteps[depthSteps.length - 1]]);
+
+    // depthがすべてのstep（-1）より浅い場合（海岸線付近）は背景色と同じ黒を返す
+    return new THREE.Color(0x000000);
   }
 
 
+  //
+  // 凡例を初期化
+  //
   initLegend = () => {
     const legendContainer = document.getElementById('legendContainer');
 
@@ -1020,6 +1206,9 @@ export class Main {
   }
 
 
+  //
+  // raycasterでフォーカスが当たっている場所の水深に応じて凡例をハイライト表示する
+  //
   updateLegendHighlight = (depth) => {
     this.clearLegendHighlight();
 
@@ -1040,9 +1229,7 @@ export class Main {
     if (legendItem) {
       legendItem.classList.add('highlight');
     }
-
   }
-
 
   clearLegendHighlight = () => {
     const highlightedItems = document.querySelectorAll('.highlight');
@@ -1050,6 +1237,9 @@ export class Main {
   }
 
 
+  //
+  // TopoJSONデータからThree.jsのShape配列を作成
+  //
   createShapesFromTopojson = (topojsonData, objectName) => {
 
     // Shapeを格納する配列
@@ -1057,10 +1247,6 @@ export class Main {
 
     // GeoJSONに変換
     const geojsonData = topojson.feature(topojsonData, topojsonData.objects[objectName]);
-
-    // GeoJSONは別途利用するかもしれないのでparamsに保存しておく？
-    // （現時点では使ってない）
-    // this.params.geojsonData = geojsonData;
 
     // FeatureCollectionからFeatureを取り出す
     const features = geojsonData.features;
@@ -1159,16 +1345,17 @@ export class Main {
   }
 
 
+  //
+  // シェイプからメッシュを作成してシーンに追加
+  //
   createMeshFromShapes = (shapes) => {
-    // ExtrudeGeometryに渡すdepthパラメータ（厚み）
-    const depth = 1.0;
 
     // ExtrudeGeometryで厚みを持たせる
     const geometry = new THREE.ExtrudeGeometry(shapes, {
-      depth: depth,
-      bevelEnabled: true,   // エッジを斜めにする
-      bevelSize: 0.5,       // 斜めのサイズ
-      bevelThickness: 0.5,  // 斜めの厚み
+      depth: 1.0,           // 厚み
+      bevelEnabled: true,   // エッジを斜めにするかどうか
+      bevelSize: 0.2,       // 斜めのサイズ
+      bevelThickness: 0.2,  // 斜めの厚み
       bevelSegments: 1,     // 斜めのセグメント数
     });
 
@@ -1196,7 +1383,7 @@ export class Main {
         new THREE.Plane(new THREE.Vector3(0, 0, -1), clippingSize * 2),  // Z座標が-xzGridSize * 2以上を表示
         new THREE.Plane(new THREE.Vector3(-1, 0, 0), clippingSize),      // X座標がxzGridSize以下を表示
         new THREE.Plane(new THREE.Vector3(1, 0, 0), clippingSize),       // X座標が-xzGridSize以上を表示
-        new THREE.Plane(new THREE.Vector3(0, 1, 0), 0),                  // Y座標が0以上を表示
+        new THREE.Plane(new THREE.Vector3(0, 1, 0), 0),                  // Y座標が0以上を表示、水面(Y=0より下)を消す
       ],
     });
 
@@ -1208,6 +1395,9 @@ export class Main {
   }
 
 
+  //
+  // マウスカーソル下の水深を表示
+  //
   renderDepth = () => {
     // 前フレーム時点でのマウス位置から変わっていないなら処理をスキップ
     if (this.mousePosition.equals(this.previousMousePosition)) {
@@ -1258,6 +1448,9 @@ export class Main {
   }
 
 
+  //
+  // 方位磁針を初期化
+  //
   initCompass = () => {
     // 方位磁針を表示するコンテナ要素
     this.compassContainer = document.getElementById('compassContainer');
@@ -1274,6 +1467,9 @@ export class Main {
   }
 
 
+  //
+  // 方位磁針をレンダリング
+  //
   renderCompass = () => {
     if (this.params.showCompass === false || !this.compassElement) {
       return;
@@ -1299,6 +1495,9 @@ export class Main {
   }
 
 
+  //
+  // ランドマークを初期化
+  //
   initLandmarks = () => {
     const LAYER = 1;  // ランドマークを表示するレイヤー
 
@@ -1350,6 +1549,9 @@ export class Main {
   }
 
 
+  //
+  // 縮尺を初期化
+  //
   initScale = () => {
     const LAYER = 2;  // 縮尺を表示するレイヤー
 
@@ -1392,7 +1594,6 @@ export class Main {
       cssObject.layers.set(LAYER);
       this.scene.add(cssObject);
     }
-
 
     // 縦線を追加
     {

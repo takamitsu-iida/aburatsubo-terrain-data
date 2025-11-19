@@ -46,11 +46,11 @@ Deeperのサブスクリプション会員になると3Dでマップが表示さ
 
 油壷専用です。
 
-<!--
 [Live Demo](https://takamitsu-iida.github.io/aburatsubo-terrain-data/index-bathymetric-data.html)
--->
 
+<!--
 [Live Demo (開発中)](https://takamitsu-iida.github.io/aburatsubo-terrain-data/index-bathymetric-data-dev.html)
+-->
 
 <br>
 
