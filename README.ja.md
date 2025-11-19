@@ -54,7 +54,7 @@ Deeperのサブスクリプション会員になると3Dでマップが表示さ
 
 **スクリーンショット** (ポイントクラウド)
 
-<img src="/assets/screen_point_cloud.png" width="640">
+<img src="/assets/screen_point_cloud.png" width="640" height="640">
 
 <br>
 
