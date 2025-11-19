@@ -67,25 +67,25 @@ I created a custom 3D visualization tool. It's specifically for Aburatsubo in Ka
 
 **screen shot** (point cloud)
 
-<img src="/assets/screen_point_cloud.png" width="640">
+<img src="/assets/screen_point_cloud.png" width="640"/>
 
 <br>
 
 **screen shot** (wireframe)
 
-<img src="/assets/screen_wireframe.png" width="640">
+<img src="/assets/screen_wireframe.png" width="640"/>
 
 <br>
 
 **screen shot** (mesh)
 
-<img src="/assets/screen_mesh.png" width="640">
+<img src="/assets/screen_mesh.png" width="640"/>
 
 <br>
 
 **screen shot** (contour)
 
-<img src="/assets/screen_contour.png" width="640">
+<img src="/assets/screen_contour.png" width="640"/>
 
 <br><br>
 
@@ -93,4 +93,4 @@ I created a custom 3D visualization tool. It's specifically for Aburatsubo in Ka
 
 <br>
 
-<img src="/assets/2d-map-by-deeper.png" width="640">
+<img src="/assets/2d-map-by-deeper.png" width="640"/>
