@@ -6,9 +6,12 @@ CSVデータの凸包をGeoJSON形式で保存します。
 
 """
 
+SCRIPT_DESCRIPTION: str = 'Create GeoJSON convex hull from CSV data'
+
 #
 # 標準ライブラリのインポート
 #
+import argparse
 import logging
 import json
 import sys
@@ -28,7 +31,6 @@ warnings.filterwarnings(action="ignore", category=UserWarning, module=r"numpy.*"
 try:
     from shapely.geometry import Point, MultiPoint, mapping
     from shapely.ops import transform
-    import pyproj
 except ImportError as e:
     logging.error("必要なライブラリがインストールされていません。")
     logging.error("pip install shapely pyproj を実行してください。")
@@ -45,6 +47,9 @@ app_name: str = app_path.stem
 
 # アプリケーションのホームディレクトリはこのファイルからみて一つ上
 app_home: Path = app_path.parent.joinpath('..').resolve()
+
+# データ置き場のディレクトリ
+data_dir: Path = app_home.joinpath("data")
 
 #
 # ログ設定
@@ -210,6 +215,35 @@ if __name__ == '__main__':
     output_path: Path = app_home.joinpath('data', output_filename)
 
     def main() -> None:
+
+        # 引数処理
+        parser = argparse.ArgumentParser(description=SCRIPT_DESCRIPTION)
+        parser.add_argument('--input', type=str, required=True, help='dataディレクトリ直下の入力CSVファイル名')
+        parser.add_argument('--output', type=str, required=True, help='dataディレクトリ直下の出力CSVファイル名')
+        args = parser.parse_args()
+
+        # 引数が何も指定されていない場合はhelpを表示して終了
+        if not any(vars(args).values()):
+            parser.print_help()
+            return
+
+        # 保存先のファイル名が指定されていない場合は終了
+        if not args.output:
+            logger.error("出力ファイル名が指定されていません。")
+            return
+
+        # 入力ファイルのパス
+        input_file_path = Path(data_dir, args.input)
+        if not input_file_path.exists():
+            logger.error(f"入力ファイルが存在しません: {input_file_path}")
+            return
+
+        # 出力ファイルの名前とパス
+        output_filename = args.output
+        output_file_path = Path(data_dir, output_filename)
+
+
+
         logger.info("=" * 80)
         logger.info("凸包GeoJSON生成処理を開始します")
         logger.info("=" * 80)
