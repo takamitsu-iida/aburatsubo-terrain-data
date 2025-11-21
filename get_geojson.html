@@ -19,30 +19,35 @@
     * {
       margin: 0;
       padding: 0;
+      box-sizing: border-box;
     }
 
     html {
       font-size: 62.5%;
+      height: 100%;
     }
 
     body {
       font-size: 1.4em;
       font-family: "Helvetica Neue", Arial, "Hiragino Kaku Gothic ProN", "Hiragino Sans", Meiryo, sans-serif;
-      padding: 20px;
+      padding: 10px;
       background-color: #f5f5f5;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
     }
 
     #status {
-      padding: 15px;
+      padding: 12px 15px;
       font-size: 1.2em;
       background-color: #fff;
       border-radius: 5px;
-      margin-bottom: 20px;
+      margin-bottom: 10px;
       box-shadow: 0 2px 4px rgba(0,0,0,0.1);
     }
 
     #controls {
-      margin-bottom: 20px;
+      margin-bottom: 10px;
     }
 
     button {
@@ -54,6 +59,7 @@
       border-radius: 4px;
       cursor: pointer;
       margin-right: 10px;
+      margin-bottom: 5px;
     }
 
     button:hover {
@@ -65,12 +71,27 @@
       cursor: not-allowed;
     }
 
+    button.active {
+      background-color: #28a745;
+    }
+
+    button.active:hover {
+      background-color: #218838;
+    }
+
     #map {
       width: 100%;
-      height: 500px;
+      height: calc(100vh - 240px);
+      min-height: 600px;
       border-radius: 5px;
       box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-      margin-bottom: 20px;
+      margin-bottom: 10px;
+      cursor: default;
+      flex-grow: 1;
+    }
+
+    #map.selecting {
+      cursor: crosshair;
     }
 
     #geojson-output {
@@ -105,7 +126,6 @@
 
     .toggle-json {
       background-color: #6c757d;
-      margin-bottom: 10px;
     }
 
     .toggle-json:hover {
@@ -115,14 +135,51 @@
     .hidden {
       display: none;
     }
+
+    .instruction {
+      background-color: #fff3cd;
+      padding: 8px 12px;
+      border-radius: 4px;
+      margin-bottom: 10px;
+      border-left: 4px solid #ffc107;
+      font-size: 0.95em;
+    }
+
+    /* レスポンシブ対応 */
+    @media (max-width: 768px) {
+      body {
+        padding: 5px;
+      }
+
+      #map {
+        height: calc(100vh - 280px);
+        min-height: 400px;
+      }
+
+      button {
+        padding: 8px 15px;
+        font-size: 0.9em;
+      }
+    }
+
+    /* フルスクリーンモード用 */
+    .leaflet-container.leaflet-fullscreen-on {
+      width: 100% !important;
+      height: 100% !important;
+    }
   </style>
 
 </head>
 
 <body>
-  <div id="status">データ取得中...</div>
+  <div id="status">地図上で範囲を選択してください</div>
+
+  <div class="instruction">
+    <strong>使い方:</strong> 「範囲選択モード」ボタンをクリックし、地図上でドラッグして範囲を選択してください。
+  </div>
 
   <div id="controls">
+    <button id="select-mode-btn">範囲選択モード</button>
     <button id="download-btn" disabled>GeoJSONをダウンロード</button>
     <button id="copy-btn" disabled>クリップボードにコピー</button>
     <button id="toggle-json-btn" class="toggle-json" disabled>JSON表示を切替</button>
@@ -144,18 +201,174 @@
 
 <script type="module">
 
+  // 初期表示の中心座標（油壺周辺）
+  const initialCenter = [35.15, 139.61];
+  const initialZoom = 13;
+
+  let map = null;
+  let geojsonData = null;
+  let jsonString = null;
+  let selectionMode = false;
+  let selectionRectangle = null;
+  let startLatLng = null;
+
+  const statusDiv = document.getElementById('status');
+  const selectModeBtn = document.getElementById('select-mode-btn');
+  const downloadBtn = document.getElementById('download-btn');
+  const copyBtn = document.getElementById('copy-btn');
+  const toggleJsonBtn = document.getElementById('toggle-json-btn');
+  const geojsonOutput = document.getElementById('geojson-output');
+
+  // 地図の初期化
+  function initMap() {
+    map = L.map('map').setView(initialCenter, initialZoom);
+
+    // タイルレイヤーの追加（OpenStreetMap）
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+      maxZoom: 19
+    }).addTo(map);
+
+    // マウスイベントの設定
+    map.on('mousedown', onMapMouseDown);
+    map.on('mousemove', onMapMouseMove);
+    map.on('mouseup', onMapMouseUp);
+
+    // ウィンドウリサイズ時に地図を再描画
+    window.addEventListener('resize', () => {
+      map.invalidateSize();
+    });
+  }
+
+  function onMapMouseDown(e) {
+    if (!selectionMode) return;
+
+    startLatLng = e.latlng;
+
+    // 既存の矩形があれば削除
+    if (selectionRectangle) {
+      map.removeLayer(selectionRectangle);
+    }
+
+    // 新しい矩形を作成
+    selectionRectangle = L.rectangle([startLatLng, startLatLng], {
+      color: '#0078d4',
+      weight: 2,
+      fillOpacity: 0.2
+    }).addTo(map);
+
+    map.dragging.disable();
+  }
+
+  function onMapMouseMove(e) {
+    if (!selectionMode || !startLatLng) return;
+
+    // 矩形を更新
+    selectionRectangle.setBounds([startLatLng, e.latlng]);
+  }
+
+  function onMapMouseUp(e) {
+    if (!selectionMode || !startLatLng) return;
+
+    const endLatLng = e.latlng;
+    map.dragging.enable();
+
+    // 選択範囲のバウンディングボックスを取得
+    const bounds = L.latLngBounds(startLatLng, endLatLng);
+    const bbox = [
+      bounds.getSouth(),
+      bounds.getWest(),
+      bounds.getNorth(),
+      bounds.getEast()
+    ];
+
+    // 範囲が有効かチェック
+    if (bounds.getSouth() === bounds.getNorth() || bounds.getWest() === bounds.getEast()) {
+      statusDiv.textContent = '範囲を選択してください（ドラッグして矩形を描いてください）';
+      statusDiv.style.backgroundColor = '#fff3cd';
+      statusDiv.style.color = '#856404';
+      startLatLng = null;
+      return;
+    }
+
+    // 選択モードを解除
+    toggleSelectionMode();
+
+    // GeoJSONデータを取得
+    fetchGeoJSONForBounds(bbox);
+
+    startLatLng = null;
+  }
+
+  function toggleSelectionMode() {
+    selectionMode = !selectionMode;
+
+    if (selectionMode) {
+      selectModeBtn.textContent = '選択モード解除';
+      selectModeBtn.classList.add('active');
+      document.getElementById('map').classList.add('selecting');
+      statusDiv.textContent = '地図上でドラッグして範囲を選択してください';
+      statusDiv.style.backgroundColor = '#d1ecf1';
+      statusDiv.style.color = '#0c5460';
+    } else {
+      selectModeBtn.textContent = '範囲選択モード';
+      selectModeBtn.classList.remove('active');
+      document.getElementById('map').classList.remove('selecting');
+      startLatLng = null;
+    }
+  }
+
+  async function fetchGeoJSONForBounds(bbox) {
+    statusDiv.textContent = 'データ取得中...';
+    statusDiv.style.backgroundColor = '#fff';
+    statusDiv.style.color = '#333';
+
+    try {
+      const geojson = await getCoastlinesWithOsmtogeojson(bbox);
+
+      if (geojson && geojson.features.length > 0) {
+        console.log('GeoJSONデータの取得と変換が成功しました。');
+        console.log('Features数:', geojson.features.length);
+        statusDiv.textContent = `✓ 成功: ${geojson.features.length}個のフィーチャーを取得しました`;
+        statusDiv.style.backgroundColor = '#d4edda';
+        statusDiv.style.color = '#155724';
+
+        geojsonData = geojson;
+        jsonString = displayGeoJSON(geojson);
+
+        // GeoJSONレイヤーを地図に追加
+        displayGeoJSONLayer(geojson);
+
+        // ボタンを有効化
+        downloadBtn.disabled = false;
+        copyBtn.disabled = false;
+        toggleJsonBtn.disabled = false;
+      } else {
+        console.log('選択範囲にデータが見つかりませんでした。');
+        statusDiv.textContent = '✗ 選択範囲にデータが見つかりませんでした';
+        statusDiv.style.backgroundColor = '#f8d7da';
+        statusDiv.style.color = '#721c24';
+      }
+    } catch (error) {
+      console.error('GeoJSONデータの処理中にエラーが発生しました:', error);
+      statusDiv.textContent = `✗ エラー: ${error.message}`;
+      statusDiv.style.backgroundColor = '#f8d7da';
+      statusDiv.style.color = '#721c24';
+    }
+  }
+
   async function getCoastlinesWithOsmtogeojson(bbox) {
     const [minLat, minLon, maxLat, maxLon] = bbox;
     const overpassQuery = `
-            [out:json][timeout:60];
-            (
-                way["natural"="coastline"](${minLat},${minLon},${maxLat},${maxLon});
-                relation["natural"="coastline"](${minLat},${minLon},${maxLat},${maxLon});
-            );
-            out body;
-            >;
-            out skel qt;
-        `;
+      [out:json][timeout:60];
+      (
+        way["natural"="coastline"](${minLat},${minLon},${maxLat},${maxLon});
+        relation["natural"="coastline"](${minLat},${minLon},${maxLat},${maxLon});
+      );
+      out body;
+      >;
+      out skel qt;
+    `;
     const overpassUrl = 'https://overpass-api.de/api/interpreter';
 
     try {
@@ -191,6 +404,48 @@
     }
   }
 
+  let geojsonLayer = null;
+
+  function displayGeoJSONLayer(geojson) {
+    // 既存のGeoJSONレイヤーがあれば削除
+    if (geojsonLayer) {
+      map.removeLayer(geojsonLayer);
+    }
+
+    // 選択矩形を削除
+    if (selectionRectangle) {
+      map.removeLayer(selectionRectangle);
+      selectionRectangle = null;
+    }
+
+    // GeoJSONレイヤーの追加
+    geojsonLayer = L.geoJSON(geojson, {
+      style: function (feature) {
+        return {
+          color: '#ff0000',
+          weight: 3,
+          opacity: 0.8
+        };
+      },
+      onEachFeature: function (feature, layer) {
+        if (feature.properties) {
+          let popupContent = '<div style="font-size: 12px;">';
+          popupContent += '<strong>プロパティ:</strong><br>';
+          for (let key in feature.properties) {
+            popupContent += `${key}: ${feature.properties[key]}<br>`;
+          }
+          popupContent += '</div>';
+          layer.bindPopup(popupContent);
+        }
+      }
+    }).addTo(map);
+
+    // 地図をGeoJSONの範囲に合わせる
+    if (geojson.features.length > 0) {
+      map.fitBounds(geojsonLayer.getBounds());
+    }
+  }
+
   function displayGeoJSON(geojson) {
     const outputDiv = document.getElementById('geojson-output');
 
@@ -216,50 +471,6 @@
     return jsonString;
   }
 
-  function displayMap(geojson, bbox) {
-    // 地図の初期化
-    const [minLat, minLon, maxLat, maxLon] = bbox;
-    const centerLat = (minLat + maxLat) / 2;
-    const centerLon = (minLon + maxLon) / 2;
-
-    const map = L.map('map').setView([centerLat, centerLon], 13);
-
-    // タイルレイヤーの追加（OpenStreetMap）
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-      maxZoom: 19
-    }).addTo(map);
-
-    // GeoJSONレイヤーの追加
-    const geojsonLayer = L.geoJSON(geojson, {
-      style: function (feature) {
-        return {
-          color: '#0078d4',
-          weight: 3,
-          opacity: 0.8
-        };
-      },
-      onEachFeature: function (feature, layer) {
-        if (feature.properties) {
-          let popupContent = '<div style="font-size: 12px;">';
-          popupContent += '<strong>プロパティ:</strong><br>';
-          for (let key in feature.properties) {
-            popupContent += `${key}: ${feature.properties[key]}<br>`;
-          }
-          popupContent += '</div>';
-          layer.bindPopup(popupContent);
-        }
-      }
-    }).addTo(map);
-
-    // 地図をGeoJSONの範囲に合わせる
-    if (geojson.features.length > 0) {
-      map.fitBounds(geojsonLayer.getBounds());
-    }
-
-    return map;
-  }
-
   function downloadGeoJSON(geojson, filename = 'coastlines.geojson') {
     const jsonString = JSON.stringify(geojson, null, 2);
     const blob = new Blob([jsonString], { type: 'application/json' });
@@ -283,53 +494,9 @@
     }
   }
 
-  // 油壺周辺の小さな範囲
-  const aburatsuboBbox = [35.13, 139.59, 35.17, 139.63];
-
-  const statusDiv = document.getElementById('status');
-  const downloadBtn = document.getElementById('download-btn');
-  const copyBtn = document.getElementById('copy-btn');
-  const toggleJsonBtn = document.getElementById('toggle-json-btn');
-  const geojsonOutput = document.getElementById('geojson-output');
-
-  let geojsonData = null;
-  let jsonString = null;
-  let map = null;
-
-  getCoastlinesWithOsmtogeojson(aburatsuboBbox)
-    .then(geojson => {
-      if (geojson) {
-        console.log('GeoJSONデータの取得と変換が成功しました。');
-        console.log('Features数:', geojson.features.length);
-        statusDiv.textContent = `✓ 成功: ${geojson.features.length}個のフィーチャーを取得しました`;
-        statusDiv.style.backgroundColor = '#d4edda';
-        statusDiv.style.color = '#155724';
-
-        geojsonData = geojson;
-        jsonString = displayGeoJSON(geojson);
-
-        // 地図を表示
-        map = displayMap(geojson, aburatsuboBbox);
-
-        // ボタンを有効化
-        downloadBtn.disabled = false;
-        copyBtn.disabled = false;
-        toggleJsonBtn.disabled = false;
-      } else {
-        console.log('GeoJSONデータの取得と変換に失敗しました。');
-        statusDiv.textContent = '✗ 失敗: GeoJSONデータを取得できませんでした';
-        statusDiv.style.backgroundColor = '#f8d7da';
-        statusDiv.style.color = '#721c24';
-      }
-    })
-    .catch(error => {
-      console.error('GeoJSONデータの処理中にエラーが発生しました:', error);
-      statusDiv.textContent = `✗ エラー: ${error.message}`;
-      statusDiv.style.backgroundColor = '#f8d7da';
-      statusDiv.style.color = '#721c24';
-    });
-
   // ボタンのイベントリスナー
+  selectModeBtn.addEventListener('click', toggleSelectionMode);
+
   downloadBtn.addEventListener('click', () => {
     if (geojsonData) {
       downloadGeoJSON(geojsonData);
@@ -345,6 +512,9 @@
   toggleJsonBtn.addEventListener('click', () => {
     geojsonOutput.classList.toggle('hidden');
   });
+
+  // 地図を初期化
+  initMap();
 
 </script>
 
