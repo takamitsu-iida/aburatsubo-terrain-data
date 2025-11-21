@@ -15,22 +15,20 @@ import argparse
 import logging
 import json
 import sys
-import csv
 
 from pathlib import Path
 from typing import List, Tuple, Optional, Dict, Any, Callable
 
-# WSL1 固有の numpy 警告を抑制
-# https://github.com/numpy/numpy/issues/18900
-import warnings
-warnings.filterwarnings(action="ignore", category=UserWarning, module=r"numpy.*", message=r"Signature b")
+#
+# ローカルライブラリのインポート
+#
+from load_save_csv import read_csv_points
 
 #
 # 外部ライブラリのインポート
 #
 try:
     from shapely.geometry import Point, MultiPoint, mapping
-    from shapely.ops import transform
 except ImportError as e:
     logging.error("必要なライブラリがインストールされていません。")
     logging.error("pip install shapely pyproj を実行してください。")
@@ -48,7 +46,7 @@ app_name: str = app_path.stem
 # アプリケーションのホームディレクトリはこのファイルからみて一つ上
 app_home: Path = app_path.parent.joinpath('..').resolve()
 
-# データ置き場のディレクトリ
+# データディレクトリ
 data_dir: Path = app_home.joinpath("data")
 
 #
@@ -56,85 +54,52 @@ data_dir: Path = app_home.joinpath("data")
 #
 
 # ログファイルの名前
-log_file: str = app_path.with_suffix('.log').name
+log_file = f"{app_name}.log"
 
 # ログファイルを置くディレクトリ
-log_dir: Path = app_home.joinpath('log')
+log_dir = app_home.joinpath("log")
 log_dir.mkdir(exist_ok=True)
 
-# ログファイルのパス
-log_path: Path = log_dir.joinpath(log_file)
-
 # ロギングの設定
-logger: logging.Logger = logging.getLogger(__name__)
+# レベルはこの順で下にいくほど詳細になる
+#   logging.CRITICAL
+#   logging.ERROR
+#   logging.WARNING --- 初期値はこのレベル
+#   logging.INFO
+#   logging.DEBUG
+#
+# ログの出力方法
+# logger.debug("debugレベルのログメッセージ")
+# logger.info("infoレベルのログメッセージ")
+# logger.warning("warningレベルのログメッセージ")
+
+# ロガーを取得
+logger = logging.getLogger(__name__)
+
+# ルートロガーへの伝播を無効化
+logger.propagate = False
+
+# ログレベル設定
 logger.setLevel(logging.INFO)
 
 # フォーマット
-formatter: logging.Formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
 
 # 標準出力へのハンドラ
-stdout_handler: logging.StreamHandler = logging.StreamHandler(sys.stdout)
+stdout_handler = logging.StreamHandler(sys.stdout)
 stdout_handler.setFormatter(formatter)
 stdout_handler.setLevel(logging.INFO)
 logger.addHandler(stdout_handler)
 
 # ログファイルのハンドラ
-file_handler: logging.FileHandler = logging.FileHandler(
-    log_dir.joinpath(log_file), 'a+', encoding='utf-8'
-)
+file_handler = logging.FileHandler(log_dir.joinpath(log_file), 'a+', encoding='utf-8')
 file_handler.setFormatter(formatter)
 file_handler.setLevel(logging.INFO)
 logger.addHandler(file_handler)
 
-
-def read_csv_points(csv_path: Path) -> List[Tuple[float, float, float]]:
-    """
-    CSVファイルから(lat, lon, depth)のデータを読み込む
-
-    Args:
-        csv_path: CSVファイルのパス
-
-    Returns:
-        (lat, lon, depth)のタプルのリスト
-    """
-    points: List[Tuple[float, float, float]] = []
-
-    try:
-        with open(csv_path, 'r', encoding='utf-8') as f:
-            # ヘッダー行の有無を自動判定
-            reader = csv.reader(f)
-            first_row = next(reader)
-
-            # 最初の行が数値でない場合はヘッダーとみなす
-            try:
-                lat = float(first_row[0])
-                lon = float(first_row[1])
-                depth = float(first_row[2])
-                points.append((lat, lon, depth))
-            except (ValueError, IndexError):
-                logger.info("ヘッダー行を検出しました。スキップします。")
-
-            # 残りの行を読み込む
-            for row in reader:
-                try:
-                    lat = float(row[0])
-                    lon = float(row[1])
-                    depth = float(row[2])
-                    points.append((lat, lon, depth))
-                except (ValueError, IndexError) as e:
-                    logger.warning(f"無効な行をスキップしました: {row}")
-                    continue
-
-        logger.info(f"{len(points)}個の点を読み込みました")
-        return points
-
-    except FileNotFoundError:
-        logger.error(f"ファイルが見つかりません: {csv_path}")
-        sys.exit(1)
-    except Exception as e:
-        logger.error(f"CSVファイルの読み込み中にエラーが発生しました: {e}")
-        sys.exit(1)
-
+#
+# ここからスクリプト
+#
 
 def create_convex_hull(points: List[Tuple[float, float, float]]) -> Dict[str, Any]:
     """
@@ -168,8 +133,8 @@ def create_convex_hull(points: List[Tuple[float, float, float]]) -> Dict[str, An
                 "type": "Feature",
                 "geometry": geojson_geometry,
                 "properties": {
-                    "name": "Convex Hull",
-                    "description": "CSVデータから作成された凸包",
+                    "name": "Lat Lon Convex Hull",
+                    "description": "Convex hull of input points",
                     "point_count": len(points)
                 }
             }
@@ -206,14 +171,6 @@ def save_geojson(geojson: Dict[str, Any], output_path: Path) -> None:
 
 if __name__ == '__main__':
 
-    # 入力ファイル
-    csv_filename: str = 'ALL_depth_map_data_202510_de_dd_ol_ip_mf.csv'
-    csv_filepath: Path = app_home.joinpath('data', csv_filename)
-
-    # 出力ファイル名
-    output_filename: str = 'convex.json'
-    output_path: Path = app_home.joinpath('data', output_filename)
-
     def main() -> None:
 
         # 引数処理
@@ -242,29 +199,24 @@ if __name__ == '__main__':
         output_filename = args.output
         output_file_path = Path(data_dir, output_filename)
 
-
-
-        logger.info("=" * 80)
         logger.info("凸包GeoJSON生成処理を開始します")
-        logger.info("=" * 80)
 
         # CSVファイルから点データを読み込む
-        logger.info(f"入力ファイル: {csv_filepath}")
-        points = read_csv_points(csv_filepath)
+        logger.info(f"入力ファイル: {input_file_path}")
+        points = read_csv_points(input_file_path)
 
+        if points is None:
+            logger.error("CSVファイルの読み込みに失敗しました")
+            return
         if len(points) < 3:
             logger.error("凸包を作成するには最低3点必要です")
-            sys.exit(1)
+            return
 
         # 凸包を作成
         geojson = create_convex_hull(points)
 
         # GeoJSONファイルとして保存
-        logger.info(f"出力ファイル: {output_path}")
-        save_geojson(geojson, output_path)
-
-        logger.info("=" * 80)
-        logger.info("処理が完了しました")
-        logger.info("=" * 80)
+        logger.info(f"出力ファイル: {output_file_path}")
+        save_geojson(geojson, output_file_path)
 
     main()

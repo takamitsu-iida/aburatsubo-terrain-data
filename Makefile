@@ -44,6 +44,10 @@ scatter: ## 散布図を作成する
 		python3 bin/draw_scatter.py --input $(BASENAME)$(DE)$(DEDUP)$(OUTLIER).csv --title "Outlier removed"; \
 	fi
 
+geojson: ## 凸包を作成してGeoJSONファイルを出力する
+	@python3 bin/create_geojson.py --input $(BASENAME)$(DE)$(DEDUP)$(OUTLIER)$(INTERPOLATE)$(MEDIAN_FILTER).csv --output aburatsubo_convex_hull.geojson
+
+
 clean: ## 中間データファイルを削除する
 	@rm -f data/*_de.csv
 	@rm -f data/*_dd.csv

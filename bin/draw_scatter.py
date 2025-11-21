@@ -88,6 +88,9 @@ log_dir.mkdir(exist_ok=True)
 # ロガーを取得
 logger = logging.getLogger(__name__)
 
+# ルートロガーへの伝播を無効化
+logger.propagate = False
+
 # ログレベル設定
 logger.setLevel(logging.INFO)
 

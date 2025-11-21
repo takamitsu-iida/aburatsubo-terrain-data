@@ -10,6 +10,7 @@ DeeperのGPSデータのCSVファイルを入出力するスクリプトです�
 #
 # 標準ライブラリのインポート
 #
+import csv
 import logging
 import sys
 
@@ -146,6 +147,54 @@ def read_csv(file_path: Path) -> Tuple[List[List[float]], Dict[str, Dict[str, fl
     logging.info(f"read_csv() {file_path}\n{tabulate(tabulate_table, headers=tabulate_headers, floatfmt='.6f')}\n")
 
     return data, stats
+
+
+def read_csv_points(csv_path: Path) -> List[Tuple[float, float, float]]:
+    """
+    CSVファイルから(lat, lon, depth)のデータを読み込む
+
+    Args:
+        csv_path: CSVファイルのパス
+
+    Returns:
+        (lat, lon, depth)のタプルのリスト
+    """
+    points: List[Tuple[float, float, float]] = []
+
+    try:
+        with open(csv_path, 'r', encoding='utf-8') as f:
+            # ヘッダー行の有無を自動判定
+            reader = csv.reader(f)
+            first_row = next(reader)
+
+            # 最初の行が数値でない場合はヘッダーとみなす
+            try:
+                lat = float(first_row[0])
+                lon = float(first_row[1])
+                depth = float(first_row[2])
+                points.append((lat, lon, depth))
+            except (ValueError, IndexError):
+                logging.info("ヘッダを検出しました。ヘッダ行はスキップします。")
+
+            # 残りの行を読み込む
+            for row in reader:
+                try:
+                    lat = float(row[0])
+                    lon = float(row[1])
+                    depth = float(row[2])
+                    points.append((lat, lon, depth))
+                except (ValueError, IndexError) as e:
+                    logging.warning(f"無効な行をスキップしました: {row}")
+                    continue
+
+        logging.info(f"{len(points)}個の点を読み込みました")
+        return points
+    except FileNotFoundError:
+        logging.error(f"ファイルが見つかりません: {csv_path}")
+    except Exception as e:
+        logging.error(f"CSVファイルの読み込み中にエラーが発生しました: {e}")
+
+    return None
 
 
 def load_csv(input_data_path: Path) -> pd.DataFrame | None:
