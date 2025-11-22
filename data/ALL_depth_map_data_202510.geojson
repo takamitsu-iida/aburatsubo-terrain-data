@@ -91,9 +91,12 @@
         ]
       },
       "properties": {
-        "name": "Lat Lon Convex Hull",
-        "description": "Convex hull of input points",
-        "point_count": 68558
+        "name": "Aburatsubo Terrain Convex Hull",
+        "description": "Convex hull of bathymetric data in Aburatsubo area after processing",
+        "source": "ALL_depth_map_data_202510_de_dd_ol_ip_mf.csv",
+        "link": "./index-bathymetric-data-dev.html",
+        "center_lat": 35.165559941949866,
+        "center_lon": 139.60749453329845
       }
     }
   ]

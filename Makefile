@@ -45,7 +45,7 @@ scatter: ## 散布図を作成する
 	fi
 
 geojson: ## 凸包を作成してGeoJSONファイルを出力する
-	@python3 bin/create_convex_hull_geojson.py --input $(BASENAME)$(DE)$(DEDUP)$(OUTLIER)$(INTERPOLATE)$(MEDIAN_FILTER).csv --output $(BASENAME).geojson
+	@python3 bin/create_convex_hull_geojson.py --input $(BASENAME)$(DE)$(DEDUP)$(OUTLIER)$(INTERPOLATE)$(MEDIAN_FILTER).csv --output $(BASENAME).geojson --name "Aburatsubo Terrain Convex Hull" --description "Convex hull of bathymetric data in Aburatsubo area after processing"
 
 
 clean: ## 中間データファイルを削除する

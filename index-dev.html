@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+  <!-- Favicon -->
+  <link rel="icon" type="image/svg+xml" href="./static/site/img/favicon.svg">
+
+  <title>Bathymetric data visualization Top</title>
+
+  <!-- Leaflet CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+    crossorigin=""/>
+
+  <style type="text/css">
+    * {
+      margin: 0;
+      padding: 0;
+    }
+
+    html {
+      font-size: 62.5%;
+    }
+
+    body {
+      font-size: 1.4em;
+      font-family: "Helvetica Neue", Arial, "Hiragino Kaku Gothic ProN", "Hiragino Sans", Meiryo, sans-serif;
+      overflow: hidden;
+      background-color: #000;
+    }
+
+    #map {
+      width: 100vw;
+      height: 100vh;
+    }
+
+    canvas {
+      display: block;
+    }
+
+    .leaflet-interactive {
+      cursor: pointer;
+    }
+
+    .area-marker {
+      background-color: #3388ff;
+      border: 2px solid white;
+      border-radius: 50%;
+      width: 30px;
+      height: 30px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: bold;
+      color: white;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+      cursor: pointer;
+    }
+
+    .area-label {
+      background: none;
+      border: none;
+      box-shadow: none;
+      text-align: center;
+      cursor: pointer;
+    }
+
+    .area-label-pin {
+      font-size: 3em;
+      line-height: 1;
+      filter: drop-shadow(2px 2px 4px rgba(0,0,0,0.5));
+    }
+
+    .area-label-text {
+      font-weight: bold;
+      color: #3388ff;
+      background-color: rgba(255, 255, 255, 0.9);
+      padding: 4px 12px;
+      border-radius: 4px;
+      font-size: 1.4em;
+      white-space: nowrap;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+      margin-top: 4px;
+      display: inline-block;
+    }
+
+    /* ツールチップとポップアップのスタイルをカスタマイズ */
+    .leaflet-tooltip {
+      font-size: 1.6em !important;
+      padding: 10px 15px !important;
+      line-height: 1.6 !important;
+      background-color: rgba(255, 255, 255, 0.95) !important;
+      border: 2px solid #3388ff !important;
+      border-radius: 6px !important;
+      box-shadow: 0 3px 10px rgba(0,0,0,0.3) !important;
+    }
+
+    .leaflet-popup-content-wrapper {
+      font-size: 1.6em !important;
+      padding: 5px !important;
+    }
+
+    .leaflet-popup-content {
+      margin: 15px 20px !important;
+      line-height: 1.6 !important;
+    }
+
+    .leaflet-popup-content strong {
+      font-size: 1.2em !important;
+      display: block;
+      margin-bottom: 8px;
+    }
+  </style>
+
+</head>
+
+<body>
+  <div id="map"></div>
+</body>
+
+<!-- Leaflet JS -->
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+  integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+  crossorigin=""></script>
+
+<script type="module">
+
+  window.addEventListener("load", async () => {
+    // ブラウザの言語設定を取得（日本語かそれ以外）
+    const isJapanese = navigator.language.startsWith('ja');
+
+    // ズームレベルの閾値（この値以下ではマーカー表示）
+    const ZOOM_THRESHOLD = 11;
+
+    // デフォルト座標（東京駅付近）
+    const defaultLat = 35.6812;
+    const defaultLon = 139.7671;
+    const defaultZoom = 13;
+
+    let map;
+    let centerLat = defaultLat;
+    let centerLon = defaultLon;
+    let initialZoom = defaultZoom;
+    let geojsonLayer = null;
+    let markerLayer = null;
+    let geojsonData = null;
+
+    // マーカー表示用のレイヤーを作成
+    function createMarkerLayer(data) {
+      const markers = [];
+
+      data.features.forEach(feature => {
+        if (feature.properties && feature.properties.center_lat && feature.properties.center_lon) {
+          const lat = feature.properties.center_lat;
+          const lon = feature.properties.center_lon;
+          const name = feature.properties.name || (isJapanese ? '名前なし' : 'No name');
+
+          // カスタムアイコンでマーカーを作成（より大きく目立つデザイン）
+          const icon = L.divIcon({
+            className: 'area-label',
+            html: `
+              <div style="text-align: center;">
+                <div class="area-label-pin">📍</div>
+                <div class="area-label-text">${name}</div>
+              </div>
+            `,
+            iconSize: [200, 80],
+            iconAnchor: [100, 40]
+          });
+
+          const marker = L.marker([lat, lon], { icon: icon });
+
+          // クリックイベント
+          marker.on('click', () => {
+            const linkUrl = feature.properties.link || './index-bathymetric-data-dev.html';
+            window.location.href = linkUrl;
+          });
+
+          // ツールチップ
+          const tooltipContent = isJapanese ?
+            `<strong>${name}</strong><br>クリックで詳細ページを開きます` :
+            `<strong>${name}</strong><br>Click to open details page`;
+
+          marker.bindTooltip(tooltipContent, {
+            direction: 'top',
+            offset: [0, -40],
+            className: 'custom-tooltip'
+          });
+
+          markers.push(marker);
+        }
+      });
+
+      return L.layerGroup(markers);
+    }
+
+    // GeoJSONポリゴン表示用のレイヤーを作成
+    function createGeoJSONLayer(data) {
+      return L.geoJSON(data, {
+        style: {
+          color: '#3388ff',
+          weight: 2,
+          opacity: 0.8,
+          fillOpacity: 0.3
+        },
+        onEachFeature: (feature, layer) => {
+          // クリックイベントを追加
+          layer.on('click', (e) => {
+            const linkUrl = feature.properties.link || './index-bathymetric-data-dev.html';
+            window.location.href = linkUrl;
+          });
+
+          // マウスオーバーでツールチップを表示
+          if (feature.properties) {
+            const props = feature.properties;
+            const popupContent = isJapanese ?
+              `<strong>${props.name || '名前なし'}</strong><br>
+               ${props.description || ''}<br>
+               <em>クリックで詳細ページを開きます</em>` :
+              `<strong>${props.name || 'No name'}</strong><br>
+               ${props.description || ''}<br>
+               <em>Click to open details page</em>`;
+
+            layer.bindTooltip(popupContent, {
+              sticky: true,
+              opacity: 0.95,
+              className: 'custom-tooltip'
+            });
+
+            // マウスオーバーでハイライト
+            layer.on('mouseover', (e) => {
+              layer.setStyle({
+                fillOpacity: 0.5,
+                weight: 3
+              });
+            });
+
+            // マウスアウトで元に戻す
+            layer.on('mouseout', (e) => {
+              layer.setStyle({
+                fillOpacity: 0.3,
+                weight: 2
+              });
+            });
+          }
+        }
+      });
+    }
+
+    // ズームレベルに応じて表示を切り替え
+    function updateLayerByZoom() {
+      const currentZoom = map.getZoom();
+
+      if (currentZoom <= ZOOM_THRESHOLD) {
+        // ズームアウト時: マーカー表示
+        if (geojsonLayer && map.hasLayer(geojsonLayer)) {
+          map.removeLayer(geojsonLayer);
+        }
+        if (markerLayer && !map.hasLayer(markerLayer)) {
+          map.addLayer(markerLayer);
+        }
+      } else {
+        // ズームイン時: ポリゴン表示
+        if (markerLayer && map.hasLayer(markerLayer)) {
+          map.removeLayer(markerLayer);
+        }
+        if (geojsonLayer && !map.hasLayer(geojsonLayer)) {
+          map.addLayer(geojsonLayer);
+        }
+      }
+    }
+
+    try {
+      // GeoJSONファイルを読み込み
+      const response = await fetch('./data/ALL_depth_map_data_202510.geojson');
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      geojsonData = await response.json();
+
+      // 最初のfeatureのpropertiesから中心座標を取得
+      const firstFeature = geojsonData.features[0];
+      centerLat = firstFeature.properties.center_lat || defaultLat;
+      centerLon = firstFeature.properties.center_lon || defaultLon;
+
+      // 地図の初期化（GeoJSONの中心座標を使用）
+      map = L.map('map').setView([centerLat, centerLon], 11);
+
+      // OpenStreetMapタイルレイヤーを追加
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+        maxZoom: 19
+      }).addTo(map);
+
+      // 両方のレイヤーを作成
+      geojsonLayer = createGeoJSONLayer(geojsonData);
+      markerLayer = createMarkerLayer(geojsonData);
+
+      // 初期表示
+      updateLayerByZoom();
+
+      // ズームイベントリスナーを追加
+      map.on('zoomend', updateLayerByZoom);
+
+      // GeoJSONの範囲に地図をフィット
+      map.fitBounds(geojsonLayer.getBounds(), {
+        padding: [100, 100],
+        maxZoom: 13
+      });
+
+    } catch (error) {
+      console.error('GeoJSONの読み込みエラー:', error);
+
+      // エラー時は東京駅付近を表示
+      map = L.map('map').setView([defaultLat, defaultLon], defaultZoom);
+
+      // OpenStreetMapタイルレイヤーを追加
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+        maxZoom: 19
+      }).addTo(map);
+
+      const error_message = isJapanese ?
+        `<strong>東京駅</strong><br>GeoJSONファイルの読み込みに失敗しました。東京駅を表示しています。` :
+        `<strong>Tokyo Station</strong><br>Failed to load GeoJSON file, displaying Tokyo Station.`;
+
+      // エラーメッセージをマーカーとして表示
+      L.marker([defaultLat, defaultLon])
+        .addTo(map)
+        .bindPopup(error_message)
+        .openPopup();
+    }
+  });
+
+</script>
+
+</html>
