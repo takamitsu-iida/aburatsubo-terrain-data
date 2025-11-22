@@ -10,14 +10,6 @@ These are water depth data collected while floating on the sea in Aburatsubo in 
 
 The data was collected using a [Deeper](https://deepersonar.com/en-all) fish finder.
 
-<br>
-
-> [!NOTE]
->
-> Aburatsubo Kanagawa Japan, link to google maps
->
-> https://maps.app.goo.gl/bigy5d56XkTJaZuN8
-
 <br><br>
 
 ## CSV data
@@ -61,7 +53,7 @@ I created a custom 3D visualization tool. It's specifically for Aburatsubo in Ka
 
 [Live Demo](https://takamitsu-iida.github.io/aburatsubo-terrain-data/index-bathymetric-data.html)
 
-[Live Demo (dev version)](https://takamitsu-iida.github.io/aburatsubo-terrain-data/index-bathymetric-data-dev.html)
+[Live Demo (dev version)](https://takamitsu-iida.github.io/aburatsubo-terrain-data/index-dev.html)
 
 <br>
 
