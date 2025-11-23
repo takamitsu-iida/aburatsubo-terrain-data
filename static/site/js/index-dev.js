@@ -22,9 +22,12 @@ export class Main {
     this.isJapanese = navigator.language.startsWith('ja');
 
     this.map = null;
-    this.geojsonLayers = [];  // 複数のGeoJSONレイヤーを管理
-    this.markerLayers = [];   // 複数のマーカーレイヤーを管理
+
     this.geojsonDataList = [];
+    this.geojsonLayers = [];  // 複数のGeoJSONレイヤーを管理
+    this.contourLayers = [];  // 複数のcontourレイヤーを管理
+    this.markerLayers = [];   // 複数のマーカーレイヤーを管理
+
   }
 
 
@@ -63,8 +66,8 @@ export class Main {
 
         // ツールチップ
         const tooltipContent = this.isJapanese ?
-          `<strong>${name}</strong><br>クリックで詳細ページを開きます` :
-          `<strong>${name}</strong><br>Click to open details page`;
+          `<strong>${name}</strong><br>クリックで3次元可視化ページを開く` :
+          `<strong>${name}</strong><br>Click to open 3D visualization page`;
 
         marker.bindTooltip(tooltipContent, {
           direction: 'top',
@@ -80,15 +83,27 @@ export class Main {
   }
 
   /**
-   * GeoJSONポリゴン表示用のレイヤーを作成
+   * GeoJSONポリゴン表示用のレイヤーを作成（contourを除く）
    */
   createGeoJSONLayer(data) {
-    return L.geoJSON(data, {
-      style: {
-        color: '#3388ff',
-        weight: 2,
-        opacity: 0.8,
-        fillOpacity: 0.3
+    // contourを除いたfeaturesのみを使用
+    const nonContourFeatures = data.features.filter(
+      feature => !feature.properties || feature.properties.type !== 'contour'
+    );
+
+    const filteredData = {
+      type: 'FeatureCollection',
+      features: nonContourFeatures
+    };
+
+    return L.geoJSON(filteredData, {
+      style: () => {
+        return {
+          color: '#3388ff',
+          weight: 2,
+          opacity: 0.8,
+          fillOpacity: 0.3
+        };
       },
       onEachFeature: (feature, layer) => {
         // クリックイベントを追加
@@ -103,10 +118,10 @@ export class Main {
           const popupContent = this.isJapanese ?
             `<strong>${props.name || '名前なし'}</strong><br>
              ${props.description || ''}<br>
-             <em>クリックで詳細ページを開きます</em>` :
+             <em>クリックで3次元可視化ページを開きます</em>` :
             `<strong>${props.name || 'No name'}</strong><br>
              ${props.description || ''}<br>
-             <em>Click to open details page</em>`;
+             <em>Click to open 3D visualization page</em>`;
 
           layer.bindTooltip(popupContent, {
             sticky: true,
@@ -134,6 +149,52 @@ export class Main {
     });
   }
 
+
+  /**
+   * Contour線表示用のレイヤーを作成
+   */
+  createContourLayer(data) {
+    // contourのfeaturesのみを使用
+    const contourFeatures = data.features.filter(
+      feature => feature.properties && feature.properties.type === 'contour'
+    );
+
+    if (contourFeatures.length === 0) {
+      return null;
+    }
+
+    const filteredData = {
+      type: 'FeatureCollection',
+      features: contourFeatures
+    };
+
+    // 凸包のプロパティを取得（非contour featureから）
+    let convexHullProperties = null;
+    for (const feature of data.features) {
+      if (!feature.properties || feature.properties.type !== 'contour') {
+        convexHullProperties = feature.properties;
+        break;
+      }
+    }
+
+    return L.geoJSON(filteredData, {
+      style: () => {
+        return {
+          color: '#00008B',  // 濃い青（DarkBlue）
+          weight: 1,
+          opacity: 0.6,
+          interactive: false  // マウスイベントを受け付けない
+        };
+      },
+      onEachFeature: (feature, layer) => {
+        // contourは非インタラクティブにする
+        layer.options.interactive = false;
+      }
+    });
+  }
+
+
+
   /**
    * ズームレベルに応じて表示を切り替え
    */
@@ -144,6 +205,11 @@ export class Main {
       // ズームアウト時: マーカー表示
       this.geojsonLayers.forEach(layer => {
         if (this.map.hasLayer(layer)) {
+          this.map.removeLayer(layer);
+        }
+      });
+      this.contourLayers.forEach(layer => {
+        if (layer && this.map.hasLayer(layer)) {
           this.map.removeLayer(layer);
         }
       });
@@ -164,9 +230,14 @@ export class Main {
           this.map.addLayer(layer);
         }
       });
+      // contourレイヤーを最後に追加（最前面に表示）
+      this.contourLayers.forEach(layer => {
+        if (layer && !this.map.hasLayer(layer)) {
+          this.map.addLayer(layer);
+        }
+      });
     }
   }
-
 
   /**
    * エラー時の地図表示（東京駅）
@@ -224,9 +295,11 @@ export class Main {
       // 各GeoJSONデータに対してレイヤーを作成
       this.geojsonDataList.forEach(data => {
         const geojsonLayer = this.createGeoJSONLayer(data);
+        const contourLayer = this.createContourLayer(data);
         const markerLayer = this.createMarkerLayer(data);
 
         this.geojsonLayers.push(geojsonLayer);
+        this.contourLayers.push(contourLayer);
         this.markerLayers.push(markerLayer);
       });
 
