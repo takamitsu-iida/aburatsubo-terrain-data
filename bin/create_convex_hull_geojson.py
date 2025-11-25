@@ -4,20 +4,18 @@
 """
 CSVデータの凸包をGeoJSON形式で保存します。
 
-
-
-# デフォルトのalpha値で実行
-create_convex_hull_geojson.py --input input.csv --output output.geojson
-
-# alpha値を調整（小さいほど詳細な境界）
-create_convex_hull_geojson.py --input input.csv --output output.geojson --alpha 0.005
-
-# alpha値を大きくすると凸包に近づく
-create_convex_hull_geojson.py --input input.csv --output output.geojson --alpha 0.1
-
 """
 
-SCRIPT_DESCRIPTION: str = 'Create GeoJSON convex hull from CSV data'
+SCRIPT_DESCRIPTION: str = 'Create Boundary GeoJSON from CSV'
+
+# デフォルト設定
+DEFAULT_AREA_NAME = "Area no name"
+DEFAULT_ALPHA = 0.01
+DEFAULT_GRID_RESOLUTION = 100
+DEFAULT_CONTOUR_LEVELS = 11  # 自動生成時のレベル数
+
+# リンク先
+DEFAULT_LINK = "./index-bathymetric-data-dev.html"
 
 #
 # 標準ライブラリのインポート
@@ -49,7 +47,6 @@ try:
     import matplotlib.pyplot as plt
 
     from shapely.geometry import Point, MultiPoint, mapping, LineString, Polygon
-    from shapely.ops import unary_union
     from scipy.interpolate import griddata
     from scipy.spatial import Delaunay
 
@@ -124,172 +121,30 @@ logger.addHandler(file_handler)
 # ここからスクリプト
 #
 
-def create_convex_hull_geometry(points: List[Tuple[float, float, float]]) -> Tuple[Dict[str, Any], Tuple[float, float]]:
-    """
-    点群から凸包を作成し、GeoJSON形式で返す
-
-    Args:
-        points: (lat, lon, depth)のタプルのリスト
-
-    Returns:
-        GeoJSON形式の辞書と中心座標(lat, lon)のタプル
-    """
-    # (lon, lat)の順序でPointオブジェクトを作成（GeoJSONの座標順序に従う）
-    shapely_points = [Point(lon, lat) for lat, lon, depth in points]
-
-    # MultiPointオブジェクトを作成
-    multi_point = MultiPoint(shapely_points)
-
-    logger.info(f"凸包を計算中...")
-
-    # 凸包を計算
-    convex_hull = multi_point.convex_hull
-
-    # 凸包の中心座標を計算
-    centroid = convex_hull.centroid
-    center_lon = centroid.x
-    center_lat = centroid.y
-
-    logger.info(f"凸包の中心座標: lat={center_lat:.6f}, lon={center_lon:.6f}")
-
-    # GeoJSON形式に変換
-    geojson_geometry = mapping(convex_hull)
-
-    logger.info(f"凸包の頂点数: {len(geojson_geometry.get('coordinates', [[]])[0])}")
-
-    return geojson_geometry, (center_lat, center_lon)
-
-
-
-def create_contours_from_points(points: List[Tuple[float, float, float]],
-                                 levels: List[float] = None,
-                                 grid_resolution: int = 100) -> List[Dict[str, Any]]:
-    """
-    点群から等高線を生成し、GeoJSON Feature のリストを返す
-
-    Args:
-        points: (lat, lon, depth)のタプルのリスト
-        levels: 等高線のレベル（深度）のリスト。Noneの場合は自動設定
-        grid_resolution: グリッドの解像度
-
-    Returns:
-        GeoJSON Feature のリスト
-    """
-    # データを配列に変換
-    lats = np.array([p[0] for p in points])
-    lons = np.array([p[1] for p in points])
-    depths = np.array([p[2] for p in points])
-
-    # グリッドを作成
-    lat_min, lat_max = lats.min(), lats.max()
-    lon_min, lon_max = lons.min(), lons.max()
-
-    grid_lat = np.linspace(lat_min, lat_max, grid_resolution)
-    grid_lon = np.linspace(lon_min, lon_max, grid_resolution)
-    grid_lon_mesh, grid_lat_mesh = np.meshgrid(grid_lon, grid_lat)
-
-    logger.info(f"グリッド補間中... (解像度: {grid_resolution}x{grid_resolution})")
-
-    # グリッド補間
-    grid_depth = griddata(
-        (lons, lats),
-        depths,
-        (grid_lon_mesh, grid_lat_mesh),
-        method='cubic'
-    )
-
-    # 等高線レベルの設定
-    if levels is None:
-        depth_min, depth_max = np.nanmin(depths), np.nanmax(depths)
-        levels = np.linspace(depth_min, depth_max, 10)
-
-    logger.info(f"等高線を生成中... (レベル数: {len(levels)})")
-
-    # 等高線を生成
-    contour_features = []
-
-    fig, ax = plt.subplots()
-    cs = ax.contour(grid_lon_mesh, grid_lat_mesh, grid_depth, levels=levels)
-
-    # collectionsの取得方法を変更
-    try:
-        collections = cs.collections
-    except AttributeError:
-        # 新しいmatplotlibではallsegsを使用
-        collections = [cs.allsegs[i] if i < len(cs.allsegs) else [] for i in range(len(levels))]
-        use_allsegs = True
-    else:
-        use_allsegs = False
-
-    # 各等高線をGeoJSON Featureに変換
-    for level_idx, level in enumerate(levels):
-        if use_allsegs:
-            # allsegsを使用する場合
-            segments = cs.allsegs[level_idx] if level_idx < len(cs.allsegs) else []
-            for segment in segments:
-                if len(segment) < 2:
-                    continue
-
-                # GeoJSON座標は [lon, lat] の順序
-                coordinates = [[float(v[0]), float(v[1])] for v in segment]
-
-                # LineStringとして追加
-                feature = {
-                    "type": "Feature",
-                    "geometry": {
-                        "type": "LineString",
-                        "coordinates": coordinates
-                    },
-                    "properties": {
-                        "depth": float(level),
-                        "type": "contour"
-                    }
-                }
-                contour_features.append(feature)
-        else:
-            # collectionsを使用する場合
-            collection = collections[level_idx]
-            for path in collection.get_paths():
-                vertices = path.vertices
-                if len(vertices) < 2:
-                    continue
-
-                # GeoJSON座標は [lon, lat] の順序
-                coordinates = [[float(v[0]), float(v[1])] for v in vertices]
-
-                # LineStringとして追加
-                feature = {
-                    "type": "Feature",
-                    "geometry": {
-                        "type": "LineString",
-                        "coordinates": coordinates
-                    },
-                    "properties": {
-                        "depth": float(level),
-                        "type": "contour"
-                    }
-                }
-                contour_features.append(feature)
-
-    plt.close(fig)
-
-    logger.info(f"等高線を {len(contour_features)} 本生成しました")
-
-    return contour_features
-
-
-
-
 def create_boundary_geometry(points: List[Tuple[float, float, float]], alpha: float = 0.01) -> Tuple[Dict[str, Any], Tuple[float, float]]:
     """
     点群から境界（concave hull）を作成し、GeoJSON形式で返す
 
+    ドロネー三角分割の外周エッジを抽出して境界を構築します。
+    失敗した場合は凸包にフォールバックします。
+
     Args:
         points: (lat, lon, depth)のタプルのリスト
-        alpha: 境界の詳細度パラメータ（小さいほど詳細な境界、大きいほど凸包に近い）
+        alpha: 境界の詳細度パラメータ（現在未使用、将来の拡張用）
 
     Returns:
-        GeoJSON形式の辞書と中心座標(lat, lon)のタプル
+        Tuple[Dict[str, Any], Tuple[float, float]]:
+            - GeoJSON形式の辞書（Polygon geometry）
+            - 中心座標(lat, lon)のタプル
+
+    Raises:
+        なし（エラー時は凸包にフォールバック）
+
+    Example:
+        >>> points = [(35.1, 139.5, -10.0), (35.2, 139.6, -15.0), ...]
+        >>> geom, (lat, lon) = create_boundary_geometry(points)
+        >>> print(geom['type'])
+        'Polygon'
     """
     # (lon, lat)の配列を作成（GeoJSONの座標順序に従う）
     coords = np.array([(lon, lat) for lat, lon, depth in points])
@@ -405,85 +260,268 @@ def create_boundary_geometry(points: List[Tuple[float, float, float]], alpha: fl
 
     return geojson_geometry, (center_lat, center_lon)
 
+
+def create_contours_and_polygons_from_points(points: List[Tuple[float, float, float]],
+                                              levels: List[float] = None,
+                                              grid_resolution: int = 100) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+    """
+    点群から等高線と水深ポリゴンを同時に生成し、GeoJSON Feature のリストを返す
+
+    同じcontourオブジェクトから生成することで、等高線とポリゴンのズレを防ぎます。
+    グリッド補間 → contourf/contour → GeoJSON変換の順に処理します。
+
+    Args:
+        points: (lat, lon, depth)のタプルのリスト
+        levels: 等深線のレベル（深度）のリスト。
+                Noneの場合は深度の最小値〜最大値を11段階に自動分割
+        grid_resolution: グリッド補間の解像度（ピクセル数）
+                        大きいほど詳細だがメモリと時間を消費
+
+    Returns:
+        Tuple[List[Dict], List[Dict]]:
+            - contour_features: 等高線のGeoJSON Featureリスト（LineString）
+            - polygon_features: 水深ポリゴンのGeoJSON Featureリスト（Polygon）
+
+    Note:
+        - matplotlib の contourf.allsegs/contour.allsegs を使用
+        - allsegs が利用できない場合は空のリストを返す
+
+    Example:
+        >>> points = [(35.1, 139.5, -10.0), ...]
+        >>> contours, polygons = create_contours_and_polygons_from_points(points)
+        >>> len(contours), len(polygons)
+        (50, 100)
+    """
+    # データを配列に変換
+    lats = np.array([p[0] for p in points])
+    lons = np.array([p[1] for p in points])
+    depths = np.array([p[2] for p in points])
+
+    # グリッドを作成
+    lat_min, lat_max = lats.min(), lats.max()
+    lon_min, lon_max = lons.min(), lons.max()
+
+    grid_lat = np.linspace(lat_min, lat_max, grid_resolution)
+    grid_lon = np.linspace(lon_min, lon_max, grid_resolution)
+    grid_lon_mesh, grid_lat_mesh = np.meshgrid(grid_lon, grid_lat)
+
+    logger.info(f"グリッド補間中... (解像度: {grid_resolution}x{grid_resolution})")
+
+    # グリッド補間
+    grid_depth = griddata(
+        (lons, lats),
+        depths,
+        (grid_lon_mesh, grid_lat_mesh),
+        method='cubic'
+    )
+
+    # 等深線レベルの設定
+    if levels is None:
+        depth_min, depth_max = np.nanmin(depths), np.nanmax(depths)
+        # 10段階に分割
+        levels = np.linspace(depth_min, depth_max, 11)
+
+    logger.info(f"等高線と水深ポリゴンを生成中... (レベル数: {len(levels)})")
+
+    contour_features = []
+    polygon_features = []
+
+    fig, ax = plt.subplots()
+
+    # contourfとcontourを同時に生成
+    cs_filled = ax.contourf(grid_lon_mesh, grid_lat_mesh, grid_depth, levels=levels, extend='neither')
+    cs_lines = ax.contour(grid_lon_mesh, grid_lat_mesh, grid_depth, levels=levels)
+
+    # 水深ポリゴンを生成（contourf）
+    if hasattr(cs_filled, 'allsegs'):
+        logger.info("水深ポリゴンを生成中...")
+
+        for level_idx in range(len(cs_filled.allsegs)):
+            segments = cs_filled.allsegs[level_idx]
+
+            # レベルの範囲を計算
+            if level_idx < len(levels) - 1:
+                depth_min = levels[level_idx]
+                depth_max = levels[level_idx + 1]
+            else:
+                continue
+
+            depth_avg = (depth_min + depth_max) / 2
+
+            for segment in segments:
+                if len(segment) < 3:
+                    continue
+
+                # GeoJSON座標は [lon, lat] の順序
+                coordinates = [[float(v[0]), float(v[1])] for v in segment]
+
+                # 閉じたポリゴンにする
+                if coordinates[0] != coordinates[-1]:
+                    coordinates.append(coordinates[0])
+
+                # Polygonとして追加
+                feature = {
+                    "type": "Feature",
+                    "geometry": {
+                        "type": "Polygon",
+                        "coordinates": [coordinates]
+                    },
+                    "properties": {
+                        "depth": float(depth_avg),
+                        "depth_min": float(depth_min),
+                        "depth_max": float(depth_max),
+                        "type": "depth_polygon"
+                    }
+                }
+                polygon_features.append(feature)
+    else:
+        logger.warning("allsegs属性が利用できません。水深ポリゴンを生成できませんでした。")
+
+    # 等高線を生成（contour）
+    if hasattr(cs_lines, 'allsegs'):
+        logger.info("等高線を生成中...")
+
+        for level_idx in range(len(cs_lines.allsegs)):
+            segments = cs_lines.allsegs[level_idx]
+
+            if level_idx < len(levels):
+                level = levels[level_idx]
+            else:
+                continue
+
+            for segment in segments:
+                if len(segment) < 2:
+                    continue
+
+                # GeoJSON座標は [lon, lat] の順序
+                coordinates = [[float(v[0]), float(v[1])] for v in segment]
+
+                # LineStringとして追加
+                feature = {
+                    "type": "Feature",
+                    "geometry": {
+                        "type": "LineString",
+                        "coordinates": coordinates
+                    },
+                    "properties": {
+                        "depth": float(level),
+                        "type": "contour"
+                    }
+                }
+                contour_features.append(feature)
+    else:
+        logger.warning("allsegs属性が利用できません。等高線を生成できませんでした。")
+
+    plt.close(fig)
+
+    logger.info(f"水深ポリゴンを {len(polygon_features)} 個、等高線を {len(contour_features)} 本生成しました")
+
+    return contour_features, polygon_features
+
+
 # ================================================================================
 # メイン処理
 # ================================================================================
 
 if __name__ == '__main__':
 
-    def main() -> None:
+    def main():
+        """メイン処理"""
+
+        epilog="""
+使用例:
+# 基本的な使用
+%(prog)s --input input.csv --output output.geojson
+
+# 水深ポリゴンなし（ファイルサイズ削減）
+%(prog)s --input input.csv --output output.geojson --no-depth-polygons
+
+# 等高線レベルを指定
+%(prog)s --input input.csv --output output.geojson --contour-levels "-10,-20,-30,-40,-50"
+
+# 境界のみ（最小サイズ）
+%(prog)s --input input.csv --output output.geojson --no-depth-polygons --no-contours
+        """
 
         # 引数処理
-        parser = argparse.ArgumentParser(description=SCRIPT_DESCRIPTION)
-        parser.add_argument('--input', type=str, required=True, help='dataディレクトリ直下の入力CSVファイル名')
-        parser.add_argument('--output', type=str, required=True, help='dataディレクトリ直下の出力CSVファイル名')
-        parser.add_argument('--name', type=str, default="Convex Hull", help='GeoJSONのFeatureのnameプロパティ')
-        parser.add_argument('--description', type=str, default="", help='GeoJSONのFeatureのdescriptionプロパティ')
-        parser.add_argument('--contour-levels', type=str, help='等高線レベル（カンマ区切り、例: -10,-20,-30,-40,-50）')
-        parser.add_argument('--grid-resolution', type=int, default=100, help='グリッド解像度（デフォルト: 100）')
-        parser.add_argument('--alpha', type=float, default=0.01, help='境界形状のパラメータ（小さいほど詳細、デフォルト: 0.01）')
+        parser = argparse.ArgumentParser(
+            description=SCRIPT_DESCRIPTION,
+            formatter_class=argparse.RawDescriptionHelpFormatter,
+            epilog=epilog
+        )
+
+        # 必須引数
+        required = parser.add_argument_group('必須引数')
+        required.add_argument('--input', type=str, required=True, help='入力CSVファイル名（dataディレクトリ直下）')
+        required.add_argument('--output', type=str, required=True, help='出力GeoJSONファイル名（dataディレクトリ直下）')
+
+        # オプション引数（基本設定）
+        basic = parser.add_argument_group('基本設定')
+        basic.add_argument('--name', type=str, default=DEFAULT_AREA_NAME, help=f'エリアの名前（デフォルト: {DEFAULT_AREA_NAME}）')
+        basic.add_argument('--description', type=str, default="", help='エリアの説明')
+
+        # オプション引数（詳細設定）
+        advanced = parser.add_argument_group('詳細設定')
+        advanced.add_argument('--alpha', type=float, default=DEFAULT_ALPHA, help=f'境界の詳細度（小さいほど詳細、デフォルト: {DEFAULT_ALPHA}）')
+        advanced.add_argument('--grid-resolution', type=int, default=DEFAULT_GRID_RESOLUTION, help=f'グリッド解像度（デフォルト: {DEFAULT_GRID_RESOLUTION}）')
+        advanced.add_argument('--contour-levels', type=str, help='等高線レベル（カンマ区切り、例: -10,-20,-30,-40,-50）')
+
+        # オプション引数（出力制御）
+        output_control = parser.add_argument_group('出力制御（ファイルサイズ削減）')
+        output_control.add_argument('--no-depth-polygons', action='store_true', help='水深ポリゴンを生成しない')
+        output_control.add_argument('--no-contours', action='store_true', help='等高線を生成しない')
 
         args = parser.parse_args()
 
-        # 入力ファイルが指定されていない場合はヘルプを表示して終了
-        if not args.input:
-            parser.print_help()
-            return
+        logger.info("=" * 60)
+        logger.info("凸包GeoJSON生成処理を開始します")
+        logger.info("=" * 60)
 
-        # 保存先のファイル名が指定されていない場合は終了
-        if not args.output:
-            parser.print_help()
-            return
-
-        # 入力ファイルのパス
+        # ファイルパスの構築
         input_file_path = Path(data_dir, args.input)
+        output_file_path = Path(data_dir, args.output)
+
+        # 入力ファイルの存在確認
         if not input_file_path.exists():
             logger.error(f"入力ファイルが存在しません: {input_file_path}")
             return
 
-        # 出力ファイルのパス
-        output_filename = args.output
-        output_file_path = Path(data_dir, output_filename)
-
-        logger.info("凸包GeoJSON生成処理を開始します")
-
-        # CSVファイルから点データを読み込む
         logger.info(f"入力ファイル: {input_file_path}")
+        logger.info(f"出力ファイル: {output_file_path}")
+
+        # CSVファイルを読み込む
         points = read_csv_points(input_file_path)
 
-        if points is None:
-            logger.error("CSVファイルの読み込みに失敗しました")
-            return
-        if len(points) < 3:
-            logger.error("凸包を作成するには最低3点必要です")
+        if not points:
+            logger.error("データポイントが読み込まれませんでした")
             return
 
-        # 凸包を作成
-        geojson_geometry, (center_lat, center_lon) = create_convex_hull_geometry(points)
+        logger.info(f"読み込んだデータポイント数: {len(points)}")
 
-        # 境界を作成（凸包から変更）
-        # geojson_geometry, (center_lat, center_lon) = create_boundary_geometry(points, alpha=args.alpha)
+        # 境界を作成
+        geojson_geometry, (center_lat, center_lon) = create_boundary_geometry(
+            points,
+            alpha=args.alpha
+        )
 
         if geojson_geometry is None:
             logger.error("境界の作成に失敗しました")
             return
 
-        # GeoJSONのFeatureCollectionを作成
-        features = [
-            {
-                "type": "Feature",
-                "geometry": geojson_geometry,
-                "properties": {
-                    "name": args.name,
-                    "description": args.description if args.description else f"(lat, lon) boundary from {input_file_path.name}",
-                    "source": input_file_path.name,
-                    "link": "./index-bathymetric-data-dev.html",
-                    "center_lat": center_lat,
-                    "center_lon": center_lon,
-                    "type": "boundary"
-                }
+        # 基本Feature（境界）を作成
+        features = [{
+            "type": "Feature",
+            "geometry": geojson_geometry,
+            "properties": {
+                "name": args.name,
+                "description": args.description or f"Boundary from {input_file_path.name}",
+                "source": input_file_path.name,
+                "link": DEFAULT_LINK,
+                "center_lat": center_lat,
+                "center_lon": center_lon,
+                "type": "boundary"
             }
-        ]
+        }]
 
         # 等高線レベルの解析
         contour_levels = None
@@ -494,31 +532,67 @@ if __name__ == '__main__':
             except ValueError:
                 logger.warning("等高線レベルのパースに失敗しました。自動設定を使用します。")
 
-        # 等高線を生成
-        contour_features = create_contours_from_points(
-            points,
-            levels=contour_levels,
-            grid_resolution=args.grid_resolution
-        )
+        # 等高線と水深ポリゴンの生成判定
+        generate_contours_or_polygons = not args.no_depth_polygons or not args.no_contours
 
-        # 等高線のFeaturesを追加
-        features.extend(contour_features)
+        if generate_contours_or_polygons:
+            logger.info("-" * 60)
+            logger.info("等高線と水深ポリゴンの生成")
+            logger.info("-" * 60)
 
+            contour_features, depth_polygon_features = create_contours_and_polygons_from_points(
+                points,
+                levels=contour_levels,
+                grid_resolution=args.grid_resolution
+            )
+
+            # 水深ポリゴンの追加
+            if not args.no_depth_polygons:
+                features.extend(depth_polygon_features)
+                logger.info(f"✓ 水深ポリゴンを追加: {len(depth_polygon_features)} 個")
+            else:
+                logger.info("✗ 水深ポリゴンの生成をスキップ")
+
+            # 等高線の追加
+            if not args.no_contours:
+                features.extend(contour_features)
+                logger.info(f"✓ 等高線を追加: {len(contour_features)} 本")
+            else:
+                logger.info("✗ 等高線の生成をスキップ")
+        else:
+            logger.info("等高線と水深ポリゴンの生成をスキップしました")
+
+        # GeoJSON作成
         geojson = {
             "type": "FeatureCollection",
             "features": features
         }
 
-        # GeoJSONファイルを保存
-        try:
-            with open(output_file_path, 'w', encoding='utf-8') as f:
-                json.dump(geojson, f, ensure_ascii=False, indent=2)
-            logger.info(f"GeoJSONファイルを保存しました: {output_file_path}")
-        except Exception as e:
-            logger.error(f"ファイルの保存中にエラーが発生しました: {e}")
-            sys.exit(1)
+        # ファイルに保存
+        with open(output_file_path, 'w', encoding='utf-8') as f:
+            json.dump(geojson, f, ensure_ascii=False, indent=2)
+
+        # 結果サマリー
+        logger.info("=" * 60)
+        logger.info("生成完了")
+        logger.info("=" * 60)
+        logger.info(f"出力ファイル: {output_file_path}")
+        logger.info(f"総Feature数: {len(features)}")
+        logger.info(f"  - 境界: 1")
+        logger.info(f"  - 水深ポリゴン: {len([f for f in features if f['properties']['type'] == 'depth_polygon'])}")
+        logger.info(f"  - 等高線: {len([f for f in features if f['properties']['type'] == 'contour'])}")
+        logger.info(f"ファイルサイズ: {output_file_path.stat().st_size / 1024:.1f} KB")
+        logger.info("=" * 60)
+
 
     #
     # 実行
     #
-    main()
+    try:
+        main()
+    except KeyboardInterrupt:
+        logger.info("処理がユーザーにより中断されました")
+        sys.exit(0)
+    except Exception as e:
+        logger.exception(f"予期せぬエラーが発生しました: {e}", exc_info=True)
+        sys.exit(1)

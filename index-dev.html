@@ -130,18 +130,21 @@
 <script type="module">
   import { Main } from './static/site/js/index-dev.js';
 
+  const params = {
+    geojsonUrls: [  // 複数のGeoJSONファイルを指定可能
+      './data/ALL_depth_map_data_202510.geojson',
+    ],
+    // zoomThreshold: 12,  // ズーム閾値 デフォルト11
+  };
+
   // ページ読み込み時に実行
   window.addEventListener('load', async () => {
-    const params = {
-      geojsonUrls: [  // 複数のGeoJSONファイルを指定可能
-        './data/ALL_depth_map_data_202510.geojson',
-        // './data/another_area.geojson',  // 追加のGeoJSONファイル
-        // './data/yet_another_area.geojson',
-      ],
-    };
-
     const app = new Main(params);
-    await app.initialize();
+    try {
+      await app.initialize();
+    } catch (error) {
+      console.error('地図の初期化中にエラーが発生しました:', error);
+    }
   });
 </script>
 

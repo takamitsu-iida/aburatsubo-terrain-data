@@ -45,8 +45,12 @@ scatter: ## 散布図を作成する
 	fi
 
 geojson: ## 凸包を作成してGeoJSONファイルを出力する
-	@python3 bin/create_convex_hull_geojson.py --input $(BASENAME)$(DE)$(DEDUP)$(OUTLIER)$(INTERPOLATE)$(MEDIAN_FILTER).csv --output $(BASENAME).geojson --name "Aburatsubo" --description "bathymetric data in Aburatsubo area collected by Deeper Sonar"
-
+	@python3 bin/create_convex_hull_geojson.py \
+		--input $(BASENAME)$(DE)$(DEDUP)$(OUTLIER)$(INTERPOLATE)$(MEDIAN_FILTER).csv \
+		--output $(BASENAME).geojson \
+		--name "Aburatsubo" \
+		--description "bathymetric data in Aburatsubo area collected by Deeper Sonar" \
+		--no-depth-polygons
 
 clean: ## 中間データファイルを削除する
 	@rm -f data/*_de.csv
