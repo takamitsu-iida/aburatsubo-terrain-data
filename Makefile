@@ -50,7 +50,10 @@ geojson: ## 凸包を作成してGeoJSONファイルを出力する
 		--output $(BASENAME).geojson \
 		--name "Aburatsubo" \
 		--description "bathymetric data in Aburatsubo area collected by Deeper Sonar" \
-		--no-depth-polygons
+		--alpha 0.001 \
+		#--no-depth-polygons \
+		#--no-contours \
+
 
 clean: ## 中間データファイルを削除する
 	@rm -f data/*_de.csv

@@ -10,7 +10,7 @@ SCRIPT_DESCRIPTION: str = 'Create Boundary GeoJSON from CSV'
 
 # デフォルト設定
 DEFAULT_AREA_NAME = "Area no name"
-DEFAULT_ALPHA = 0.01
+DEFAULT_ALPHA = 0.001
 DEFAULT_GRID_RESOLUTION = 100
 DEFAULT_CONTOUR_LEVELS = 11  # 自動生成時のレベル数
 
@@ -123,124 +123,87 @@ logger.addHandler(file_handler)
 
 def create_boundary_geometry(points: List[Tuple[float, float, float]], alpha: float = 0.01) -> Tuple[Dict[str, Any], Tuple[float, float]]:
     """
-    点群から境界（concave hull）を作成し、GeoJSON形式で返す
+    点群から境界（concave hull / alpha-shape）を作成し、GeoJSON形式で返す
 
-    ドロネー三角分割の外周エッジを抽出して境界を構築します。
+    alpha-shapeアルゴリズムを使用して実際のデータの輪郭を抽出します。
     失敗した場合は凸包にフォールバックします。
 
     Args:
         points: (lat, lon, depth)のタプルのリスト
-        alpha: 境界の詳細度パラメータ（現在未使用、将来の拡張用）
+        alpha: 境界の詳細度パラメータ（小さいほど詳細、推奨: 0.001-0.1）
 
     Returns:
         Tuple[Dict[str, Any], Tuple[float, float]]:
             - GeoJSON形式の辞書（Polygon geometry）
             - 中心座標(lat, lon)のタプル
-
-    Raises:
-        なし（エラー時は凸包にフォールバック）
-
-    Example:
-        >>> points = [(35.1, 139.5, -10.0), (35.2, 139.6, -15.0), ...]
-        >>> geom, (lat, lon) = create_boundary_geometry(points)
-        >>> print(geom['type'])
-        'Polygon'
     """
+    from shapely.ops import unary_union
+
     # (lon, lat)の配列を作成（GeoJSONの座標順序に従う）
     coords = np.array([(lon, lat) for lat, lon, depth in points])
 
     logger.info(f"境界を計算中... (alpha={alpha})")
 
-    # ドロネー三角分割を実行
-    tri = Delaunay(coords)
+    try:
+        # ドロネー三角分割
+        tri = Delaunay(coords)
 
-    # 境界エッジを抽出（外周の辺のみ）
-    edges = {}  # edge -> triangle count
+        # alpha-shape用の三角形フィルタリング
+        triangles = []
+        total_triangles = len(tri.simplices)
+        accepted_triangles = 0
 
-    for simplex in tri.simplices:
-        for i, j in [(0, 1), (1, 2), (2, 0)]:
-            edge = tuple(sorted([simplex[i], simplex[j]]))
-            edges[edge] = edges.get(edge, 0) + 1
+        for simplex in tri.simplices:
+            # 三角形の外接円の半径を計算
+            pts = coords[simplex]
+            a = np.linalg.norm(pts[0] - pts[1])
+            b = np.linalg.norm(pts[1] - pts[2])
+            c = np.linalg.norm(pts[2] - pts[0])
+            s = (a + b + c) / 2
 
-    # 外周のエッジ（1つの三角形にしか属さない辺）を抽出
-    boundary_edges = [edge for edge, count in edges.items() if count == 1]
+            if s * (s - a) * (s - b) * (s - c) <= 0:
+                continue
 
-    logger.info(f"境界エッジ数: {len(boundary_edges)}")
+            area = np.sqrt(s * (s - a) * (s - b) * (s - c))
+            if area == 0:
+                continue
 
-    if not boundary_edges:
-        logger.warning("境界エッジの抽出に失敗しました。凸包を使用します。")
+            circum_r = (a * b * c) / (4 * area)
+
+            # alpha値より小さい三角形のみ使用
+            # alphaが大きいほど厳しい条件（小さい三角形のみ受け入れる）
+            if circum_r < alpha:
+                triangle = Polygon([coords[simplex[0]],
+                                  coords[simplex[1]],
+                                  coords[simplex[2]]])
+                triangles.append(triangle)
+                accepted_triangles += 1
+
+        logger.info(f"三角形: {accepted_triangles}/{total_triangles} 個を使用 (alpha={alpha})")
+
+        if not triangles:
+            logger.warning("alpha-shapeの生成に失敗。凸包を使用します。")
+            raise ValueError("No triangles")
+
+        # 三角形を結合して境界を作成
+        boundary = unary_union(triangles)
+
+        # MultiPolygonの場合は最大のポリゴンを使用
+        if boundary.geom_type == 'MultiPolygon':
+            boundary = max(boundary.geoms, key=lambda p: p.area)
+
+        # Polygonの場合、外側の輪郭のみを取得（穴を除去）
+        if boundary.geom_type == 'Polygon':
+            # 外側の輪郭のみで新しいポリゴンを作成
+            boundary = Polygon(boundary.exterior.coords)
+
+        logger.info(f"alpha-shapeの生成に成功")
+
+    except Exception as e:
+        logger.warning(f"alpha-shape生成エラー: {e}。凸包を使用します。")
         shapely_points = [Point(lon, lat) for lat, lon, depth in points]
         multi_point = MultiPoint(shapely_points)
         boundary = multi_point.convex_hull
-    else:
-        # エッジから連続したパスを構築
-        from collections import defaultdict
-        graph = defaultdict(list)
-
-        for i, j in boundary_edges:
-            graph[i].append(j)
-            graph[j].append(i)
-
-        # 外周パスを構築
-        if not graph:
-            logger.warning("グラフの構築に失敗しました。凸包を使用します。")
-            shapely_points = [Point(lon, lat) for lat, lon, depth in points]
-            multi_point = MultiPoint(shapely_points)
-            boundary = multi_point.convex_hull
-        else:
-            # 開始点を選択
-            start = next(iter(graph.keys()))
-            path = [start]
-            current = start
-            visited = {start}
-
-            # パスを辿る
-            while len(path) < len(boundary_edges) + 1:
-                neighbors = graph[current]
-
-                # 未訪問の隣接点を探す
-                next_nodes = [n for n in neighbors if n not in visited]
-
-                if not next_nodes:
-                    # 閉じたパスの場合
-                    if len(path) > 2 and start in neighbors:
-                        break
-                    # 行き止まりの場合は最も近い点を探す
-                    logger.warning("パスが途切れました。利用可能な点からパスを再構築します。")
-                    break
-
-                next_node = next_nodes[0]
-                path.append(next_node)
-                visited.add(next_node)
-                current = next_node
-
-            if len(path) >= 3:
-                # 座標リストを作成
-                boundary_coords = [coords[i].tolist() for i in path]
-
-                # 閉じたポリゴンにする
-                if boundary_coords[0] != boundary_coords[-1]:
-                    boundary_coords.append(boundary_coords[0])
-
-                try:
-                    boundary = Polygon(boundary_coords)
-
-                    # ポリゴンが有効か確認
-                    if not boundary.is_valid:
-                        logger.warning("生成されたポリゴンが無効です。凸包を使用します。")
-                        shapely_points = [Point(lon, lat) for lat, lon, depth in points]
-                        multi_point = MultiPoint(shapely_points)
-                        boundary = multi_point.convex_hull
-                except Exception as e:
-                    logger.warning(f"ポリゴンの作成に失敗しました: {e}。凸包を使用します。")
-                    shapely_points = [Point(lon, lat) for lat, lon, depth in points]
-                    multi_point = MultiPoint(shapely_points)
-                    boundary = multi_point.convex_hull
-            else:
-                logger.warning("十分な点が見つかりませんでした。凸包を使用します。")
-                shapely_points = [Point(lon, lat) for lat, lon, depth in points]
-                multi_point = MultiPoint(shapely_points)
-                boundary = multi_point.convex_hull
 
     # 境界の中心座標を計算
     centroid = boundary.centroid
@@ -261,9 +224,13 @@ def create_boundary_geometry(points: List[Tuple[float, float, float]], alpha: fl
     return geojson_geometry, (center_lat, center_lon)
 
 
+
 def create_contours_and_polygons_from_points(points: List[Tuple[float, float, float]],
                                               levels: List[float] = None,
-                                              grid_resolution: int = 100) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+                                              grid_resolution: int = 100,
+                                              generate_contours: bool = True,
+                                              generate_polygons: bool = True,
+                                              boundary_polygon = None) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
     """
     点群から等高線と水深ポリゴンを同時に生成し、GeoJSON Feature のリストを返す
 
@@ -276,21 +243,14 @@ def create_contours_and_polygons_from_points(points: List[Tuple[float, float, fl
                 Noneの場合は深度の最小値〜最大値を11段階に自動分割
         grid_resolution: グリッド補間の解像度（ピクセル数）
                         大きいほど詳細だがメモリと時間を消費
+        generate_contours: 等高線を生成するかどうか
+        generate_polygons: 水深ポリゴンを生成するかどうか
+        boundary_polygon: 境界ポリゴン（Shapely Polygon）。指定すると等高線・ポリゴンをクリッピング
 
     Returns:
         Tuple[List[Dict], List[Dict]]:
             - contour_features: 等高線のGeoJSON Featureリスト（LineString）
             - polygon_features: 水深ポリゴンのGeoJSON Featureリスト（Polygon）
-
-    Note:
-        - matplotlib の contourf.allsegs/contour.allsegs を使用
-        - allsegs が利用できない場合は空のリストを返す
-
-    Example:
-        >>> points = [(35.1, 139.5, -10.0), ...]
-        >>> contours, polygons = create_contours_and_polygons_from_points(points)
-        >>> len(contours), len(polygons)
-        (50, 100)
     """
     # データを配列に変換
     lats = np.array([p[0] for p in points])
@@ -328,95 +288,172 @@ def create_contours_and_polygons_from_points(points: List[Tuple[float, float, fl
 
     fig, ax = plt.subplots()
 
-    # contourfとcontourを同時に生成
-    cs_filled = ax.contourf(grid_lon_mesh, grid_lat_mesh, grid_depth, levels=levels, extend='neither')
-    cs_lines = ax.contour(grid_lon_mesh, grid_lat_mesh, grid_depth, levels=levels)
-
     # 水深ポリゴンを生成（contourf）
-    if hasattr(cs_filled, 'allsegs'):
-        logger.info("水深ポリゴンを生成中...")
+    if generate_polygons:
+        cs_filled = ax.contourf(grid_lon_mesh, grid_lat_mesh, grid_depth, levels=levels, extend='neither')
 
-        for level_idx in range(len(cs_filled.allsegs)):
-            segments = cs_filled.allsegs[level_idx]
+        if hasattr(cs_filled, 'allsegs'):
+            logger.info("水深ポリゴンを生成中...")
 
-            # レベルの範囲を計算
-            if level_idx < len(levels) - 1:
-                depth_min = levels[level_idx]
-                depth_max = levels[level_idx + 1]
-            else:
-                continue
+            for level_idx in range(len(cs_filled.allsegs)):
+                segments = cs_filled.allsegs[level_idx]
 
-            depth_avg = (depth_min + depth_max) / 2
-
-            for segment in segments:
-                if len(segment) < 3:
+                # レベルの範囲を計算
+                if level_idx < len(levels) - 1:
+                    depth_min = levels[level_idx]
+                    depth_max = levels[level_idx + 1]
+                else:
                     continue
 
-                # GeoJSON座標は [lon, lat] の順序
-                coordinates = [[float(v[0]), float(v[1])] for v in segment]
+                depth_avg = (depth_min + depth_max) / 2
 
-                # 閉じたポリゴンにする
-                if coordinates[0] != coordinates[-1]:
-                    coordinates.append(coordinates[0])
+                for segment in segments:
+                    if len(segment) < 3:
+                        continue
 
-                # Polygonとして追加
-                feature = {
-                    "type": "Feature",
-                    "geometry": {
-                        "type": "Polygon",
-                        "coordinates": [coordinates]
-                    },
-                    "properties": {
-                        "depth": float(depth_avg),
-                        "depth_min": float(depth_min),
-                        "depth_max": float(depth_max),
-                        "type": "depth_polygon"
+                    # GeoJSON座標は [lon, lat] の順序
+                    coordinates = [[float(v[0]), float(v[1])] for v in segment]
+
+                    # 閉じたポリゴンにする
+                    if coordinates[0] != coordinates[-1]:
+                        coordinates.append(coordinates[0])
+
+                    # ポリゴンを作成
+                    poly = Polygon(coordinates)
+
+                    # 境界でクリッピング
+                    if boundary_polygon is not None:
+                        try:
+                            poly = poly.intersection(boundary_polygon)
+                            if poly.is_empty:
+                                continue
+                        except Exception as e:
+                            logger.warning(f"ポリゴンのクリッピングに失敗: {e}")
+                            continue
+
+                    # GeoJSON座標に変換
+                    if poly.geom_type == 'Polygon':
+                        clipped_coords = [[list(coord) for coord in poly.exterior.coords]]
+                    elif poly.geom_type == 'MultiPolygon':
+                        # MultiPolygonの場合は各ポリゴンを個別に追加
+                        for sub_poly in poly.geoms:
+                            clipped_coords = [[list(coord) for coord in sub_poly.exterior.coords]]
+                            feature = {
+                                "type": "Feature",
+                                "geometry": {
+                                    "type": "Polygon",
+                                    "coordinates": clipped_coords
+                                },
+                                "properties": {
+                                    "depth": float(depth_avg),
+                                    "depth_min": float(depth_min),
+                                    "depth_max": float(depth_max),
+                                    "type": "depth_polygon"
+                                }
+                            }
+                            polygon_features.append(feature)
+                        continue
+                    else:
+                        continue
+
+                    # Polygonとして追加
+                    feature = {
+                        "type": "Feature",
+                        "geometry": {
+                            "type": "Polygon",
+                            "coordinates": clipped_coords
+                        },
+                        "properties": {
+                            "depth": float(depth_avg),
+                            "depth_min": float(depth_min),
+                            "depth_max": float(depth_max),
+                            "type": "depth_polygon"
+                        }
                     }
-                }
-                polygon_features.append(feature)
-    else:
-        logger.warning("allsegs属性が利用できません。水深ポリゴンを生成できませんでした。")
+                    polygon_features.append(feature)
+        else:
+            logger.warning("allsegs属性が利用できません。水深ポリゴンを生成できませんでした。")
 
     # 等高線を生成（contour）
-    if hasattr(cs_lines, 'allsegs'):
-        logger.info("等高線を生成中...")
+    if generate_contours:
+        cs_lines = ax.contour(grid_lon_mesh, grid_lat_mesh, grid_depth, levels=levels)
 
-        for level_idx in range(len(cs_lines.allsegs)):
-            segments = cs_lines.allsegs[level_idx]
+        if hasattr(cs_lines, 'allsegs'):
+            logger.info("等高線を生成中...")
 
-            if level_idx < len(levels):
-                level = levels[level_idx]
-            else:
-                continue
+            for level_idx in range(len(cs_lines.allsegs)):
+                segments = cs_lines.allsegs[level_idx]
 
-            for segment in segments:
-                if len(segment) < 2:
+                if level_idx < len(levels):
+                    level = levels[level_idx]
+                else:
                     continue
 
-                # GeoJSON座標は [lon, lat] の順序
-                coordinates = [[float(v[0]), float(v[1])] for v in segment]
+                for segment in segments:
+                    if len(segment) < 2:
+                        continue
 
-                # LineStringとして追加
-                feature = {
-                    "type": "Feature",
-                    "geometry": {
-                        "type": "LineString",
-                        "coordinates": coordinates
-                    },
-                    "properties": {
-                        "depth": float(level),
-                        "type": "contour"
+                    # GeoJSON座標は [lon, lat] の順序
+                    coordinates = [[float(v[0]), float(v[1])] for v in segment]
+
+                    # LineStringを作成
+                    line = LineString(coordinates)
+
+                    # 境界でクリッピング
+                    if boundary_polygon is not None:
+                        try:
+                            line = line.intersection(boundary_polygon)
+                            if line.is_empty:
+                                continue
+                        except Exception as e:
+                            logger.warning(f"等高線のクリッピングに失敗: {e}")
+                            continue
+
+                    # GeoJSON座標に変換
+                    if line.geom_type == 'LineString':
+                        clipped_coords = [list(coord) for coord in line.coords]
+                    elif line.geom_type == 'MultiLineString':
+                        # MultiLineStringの場合は各ラインを個別に追加
+                        for sub_line in line.geoms:
+                            clipped_coords = [list(coord) for coord in sub_line.coords]
+                            feature = {
+                                "type": "Feature",
+                                "geometry": {
+                                    "type": "LineString",
+                                    "coordinates": clipped_coords
+                                },
+                                "properties": {
+                                    "depth": float(level),
+                                    "type": "contour"
+                                }
+                            }
+                            contour_features.append(feature)
+                        continue
+                    else:
+                        continue
+
+                    # LineStringとして追加
+                    feature = {
+                        "type": "Feature",
+                        "geometry": {
+                            "type": "LineString",
+                            "coordinates": clipped_coords
+                        },
+                        "properties": {
+                            "depth": float(level),
+                            "type": "contour"
+                        }
                     }
-                }
-                contour_features.append(feature)
-    else:
-        logger.warning("allsegs属性が利用できません。等高線を生成できませんでした。")
+                    contour_features.append(feature)
+        else:
+            logger.warning("allsegs属性が利用できません。等高線を生成できませんでした。")
 
     plt.close(fig)
 
     logger.info(f"水深ポリゴンを {len(polygon_features)} 個、等高線を {len(contour_features)} 本生成しました")
 
     return contour_features, polygon_features
+
 
 
 # ================================================================================
@@ -474,7 +511,7 @@ if __name__ == '__main__':
         args = parser.parse_args()
 
         logger.info("=" * 60)
-        logger.info("凸包GeoJSON生成処理を開始します")
+        logger.info("GeoJSON生成処理を開始します")
         logger.info("=" * 60)
 
         # ファイルパスの構築
@@ -508,6 +545,10 @@ if __name__ == '__main__':
             logger.error("境界の作成に失敗しました")
             return
 
+        # Shapely Polygonオブジェクトを作成（クリッピング用）
+        from shapely.geometry import shape
+        boundary_polygon = shape(geojson_geometry)
+
         # 基本Feature（境界）を作成
         features = [{
             "type": "Feature",
@@ -533,7 +574,10 @@ if __name__ == '__main__':
                 logger.warning("等高線レベルのパースに失敗しました。自動設定を使用します。")
 
         # 等高線と水深ポリゴンの生成判定
-        generate_contours_or_polygons = not args.no_depth_polygons or not args.no_contours
+        # どちらか一方でも生成する場合のみTrueにする
+        need_contours = not args.no_contours
+        need_polygons = not args.no_depth_polygons
+        generate_contours_or_polygons = need_contours or need_polygons
 
         if generate_contours_or_polygons:
             logger.info("-" * 60)
@@ -543,22 +587,22 @@ if __name__ == '__main__':
             contour_features, depth_polygon_features = create_contours_and_polygons_from_points(
                 points,
                 levels=contour_levels,
-                grid_resolution=args.grid_resolution
+                grid_resolution=args.grid_resolution,
+                generate_contours=need_contours,
+                generate_polygons=need_polygons,
+                boundary_polygon=boundary_polygon  # 境界ポリゴンを渡す
             )
 
             # 水深ポリゴンの追加
-            if not args.no_depth_polygons:
+            if need_polygons:
                 features.extend(depth_polygon_features)
                 logger.info(f"✓ 水深ポリゴンを追加: {len(depth_polygon_features)} 個")
-            else:
-                logger.info("✗ 水深ポリゴンの生成をスキップ")
 
             # 等高線の追加
-            if not args.no_contours:
+            if need_contours:
                 features.extend(contour_features)
                 logger.info(f"✓ 等高線を追加: {len(contour_features)} 本")
-            else:
-                logger.info("✗ 等高線の生成をスキップ")
+
         else:
             logger.info("等高線と水深ポリゴンの生成をスキップしました")
 
