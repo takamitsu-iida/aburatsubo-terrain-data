@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 """
-CSVデータの凸包をGeoJSON形式で保存します。
+(lat, lon, depth)のCSVデータの境界線と等深線をGeoJSON形式で保存します。
 
 """
 
