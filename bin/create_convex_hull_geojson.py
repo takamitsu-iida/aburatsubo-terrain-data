@@ -10,11 +10,20 @@ SCRIPT_DESCRIPTION: str = 'Create Boundary GeoJSON from CSV'
 
 # デフォルト設定
 DEFAULT_AREA_NAME = "Area no name"
-DEFAULT_ALPHA = 0.001
-DEFAULT_GRID_RESOLUTION = 100
-DEFAULT_CONTOUR_LEVELS = 11  # 自動生成時のレベル数
 
-# リンク先
+# alpha-shape境界パラメータ
+# 小さいほど境界がタイト（陸地を避ける）、大きいほど緩い（広範囲をカバー）
+# 座標が度単位なので0.001-0.01の範囲を推奨
+DEFAULT_ALPHA = 0.001
+
+# グリッド補間解像度（ピクセル数）
+# 大きいほど等高線が詳細になるが、処理時間とメモリを消費
+DEFAULT_GRID_RESOLUTION = 100
+
+# 等高線レベルの自動生成時の分割数
+DEFAULT_CONTOUR_LEVELS = 11
+
+# 海底地形図を３次元表示するHTMLファイルへのリンク
 DEFAULT_LINK = "./index-bathymetric-data-dev.html"
 
 #
@@ -121,16 +130,28 @@ logger.addHandler(file_handler)
 # ここからスクリプト
 #
 
+# ================================================================================
+# ジオメトリ生成関数
+# ================================================================================
+
 def create_boundary_geometry(points: List[Tuple[float, float, float]], alpha: float = 0.01) -> Tuple[Dict[str, Any], Tuple[float, float]]:
     """
     点群から境界（concave hull / alpha-shape）を作成し、GeoJSON形式で返す
 
-    alpha-shapeアルゴリズムを使用して実際のデータの輪郭を抽出します。
-    失敗した場合は凸包にフォールバックします。
+    alpha-shapeアルゴリズムの仕組み:
+    1. ドロネー三角分割で全ての点を三角形で結ぶ
+    2. 各三角形の外接円半径を計算
+    3. alpha値より小さい外接円の三角形のみを採用
+    4. 採用された三角形を結合して境界を作成
+
+    alphaパラメータの効果:
+    - 小さい値（例: 0.001）→ タイトな境界、陸地を避ける
+    - 大きい値（例: 0.01） → 緩い境界、広範囲をカバー
 
     Args:
         points: (lat, lon, depth)のタプルのリスト
-        alpha: 境界の詳細度パラメータ（小さいほど詳細、推奨: 0.001-0.1）
+        alpha: 境界の詳細度パラメータ（推奨: 0.001-0.01）
+               ※度単位の座標系なので小さい値を使用
 
     Returns:
         Tuple[Dict[str, Any], Tuple[float, float]]:
@@ -139,39 +160,40 @@ def create_boundary_geometry(points: List[Tuple[float, float, float]], alpha: fl
     """
     from shapely.ops import unary_union
 
-    # (lon, lat)の配列を作成（GeoJSONの座標順序に従う）
+    # (lon, lat)の配列を作成（GeoJSONは経度が先）
     coords = np.array([(lon, lat) for lat, lon, depth in points])
 
     logger.info(f"境界を計算中... (alpha={alpha})")
 
     try:
-        # ドロネー三角分割
+        # ステップ1: ドロネー三角分割
         tri = Delaunay(coords)
 
-        # alpha-shape用の三角形フィルタリング
+        # ステップ2: alpha-shape用の三角形フィルタリング
         triangles = []
         total_triangles = len(tri.simplices)
         accepted_triangles = 0
 
         for simplex in tri.simplices:
-            # 三角形の外接円の半径を計算
+            # 三角形の3辺の長さを計算
             pts = coords[simplex]
             a = np.linalg.norm(pts[0] - pts[1])
             b = np.linalg.norm(pts[1] - pts[2])
             c = np.linalg.norm(pts[2] - pts[0])
-            s = (a + b + c) / 2
 
+            # ヘロンの公式で面積を計算
+            s = (a + b + c) / 2
             if s * (s - a) * (s - b) * (s - c) <= 0:
                 continue
-
             area = np.sqrt(s * (s - a) * (s - b) * (s - c))
             if area == 0:
                 continue
 
+            # 外接円の半径を計算（R = abc / 4A）
             circum_r = (a * b * c) / (4 * area)
 
-            # alpha値より小さい三角形のみ使用
-            # alphaが大きいほど厳しい条件（小さい三角形のみ受け入れる）
+            # alpha判定: 外接円半径がalpha未満なら採用
+            # 小さい三角形のみが残り、境界がタイトになる
             if circum_r < alpha:
                 triangle = Polygon([coords[simplex[0]],
                                   coords[simplex[1]],
@@ -185,21 +207,21 @@ def create_boundary_geometry(points: List[Tuple[float, float, float]], alpha: fl
             logger.warning("alpha-shapeの生成に失敗。凸包を使用します。")
             raise ValueError("No triangles")
 
-        # 三角形を結合して境界を作成
+        # ステップ3: 三角形を結合して境界ポリゴンを作成
         boundary = unary_union(triangles)
 
-        # MultiPolygonの場合は最大のポリゴンを使用
+        # ステップ4: 最大のポリゴンのみを使用（小さな断片を除去）
         if boundary.geom_type == 'MultiPolygon':
             boundary = max(boundary.geoms, key=lambda p: p.area)
 
-        # Polygonの場合、外側の輪郭のみを取得（穴を除去）
+        # ステップ5: 外側の輪郭のみを取得（内側の穴を除去）
         if boundary.geom_type == 'Polygon':
-            # 外側の輪郭のみで新しいポリゴンを作成
             boundary = Polygon(boundary.exterior.coords)
 
         logger.info(f"alpha-shapeの生成に成功")
 
     except Exception as e:
+        # フォールバック: 凸包を使用
         logger.warning(f"alpha-shape生成エラー: {e}。凸包を使用します。")
         shapely_points = [Point(lon, lat) for lat, lon, depth in points]
         multi_point = MultiPoint(shapely_points)
@@ -222,7 +244,6 @@ def create_boundary_geometry(points: List[Tuple[float, float, float]], alpha: fl
         logger.info(f"境界の形状タイプ: {geojson_geometry['type']}")
 
     return geojson_geometry, (center_lat, center_lon)
-
 
 
 def create_contours_and_polygons_from_points(points: List[Tuple[float, float, float]],
@@ -252,12 +273,15 @@ def create_contours_and_polygons_from_points(points: List[Tuple[float, float, fl
             - contour_features: 等高線のGeoJSON Featureリスト（LineString）
             - polygon_features: 水深ポリゴンのGeoJSON Featureリスト（Polygon）
     """
-    # データを配列に変換
+
+    # ==================== データ準備 ====================
+
     lats = np.array([p[0] for p in points])
     lons = np.array([p[1] for p in points])
     depths = np.array([p[2] for p in points])
 
-    # グリッドを作成
+    # ==================== グリッド作成 ====================
+
     lat_min, lat_max = lats.min(), lats.max()
     lon_min, lon_max = lons.min(), lons.max()
 
@@ -265,9 +289,10 @@ def create_contours_and_polygons_from_points(points: List[Tuple[float, float, fl
     grid_lon = np.linspace(lon_min, lon_max, grid_resolution)
     grid_lon_mesh, grid_lat_mesh = np.meshgrid(grid_lon, grid_lat)
 
+    # ==================== グリッド補間（cubic spline） ====================
+
     logger.info(f"グリッド補間中... (解像度: {grid_resolution}x{grid_resolution})")
 
-    # グリッド補間
     grid_depth = griddata(
         (lons, lats),
         depths,
@@ -275,7 +300,8 @@ def create_contours_and_polygons_from_points(points: List[Tuple[float, float, fl
         method='cubic'
     )
 
-    # 等深線レベルの設定
+    # ==================== 等深線レベルの設定 ====================
+
     if levels is None:
         depth_min, depth_max = np.nanmin(depths), np.nanmax(depths)
         # 10段階に分割
@@ -288,7 +314,8 @@ def create_contours_and_polygons_from_points(points: List[Tuple[float, float, fl
 
     fig, ax = plt.subplots()
 
-    # 水深ポリゴンを生成（contourf）
+    # ==================== 水深ポリゴン生成 ====================
+
     if generate_polygons:
         cs_filled = ax.contourf(grid_lon_mesh, grid_lat_mesh, grid_depth, levels=levels, extend='neither')
 
@@ -374,7 +401,8 @@ def create_contours_and_polygons_from_points(points: List[Tuple[float, float, fl
         else:
             logger.warning("allsegs属性が利用できません。水深ポリゴンを生成できませんでした。")
 
-    # 等高線を生成（contour）
+    # ==================== 等深線生成 ====================
+
     if generate_contours:
         cs_lines = ax.contour(grid_lon_mesh, grid_lat_mesh, grid_depth, levels=levels)
 
@@ -514,7 +542,8 @@ if __name__ == '__main__':
         logger.info("GeoJSON生成処理を開始します")
         logger.info("=" * 60)
 
-        # ファイルパスの構築
+        # ==================== STEP 1: ファイルパス設定 ====================
+
         input_file_path = Path(data_dir, args.input)
         output_file_path = Path(data_dir, args.output)
 
@@ -526,7 +555,8 @@ if __name__ == '__main__':
         logger.info(f"入力ファイル: {input_file_path}")
         logger.info(f"出力ファイル: {output_file_path}")
 
-        # CSVファイルを読み込む
+        # ==================== STEP 2: CSVファイル読み込み ====================
+
         points = read_csv_points(input_file_path)
 
         if not points:
@@ -535,7 +565,12 @@ if __name__ == '__main__':
 
         logger.info(f"読み込んだデータポイント数: {len(points)}")
 
-        # 境界を作成
+        # ==================== STEP 3: 境界ポリゴン作成 ====================
+
+        logger.info("-" * 60)
+        logger.info("境界ジオメトリの作成（alpha-shape）")
+        logger.info("-" * 60)
+
         geojson_geometry, (center_lat, center_lon) = create_boundary_geometry(
             points,
             alpha=args.alpha
@@ -549,7 +584,9 @@ if __name__ == '__main__':
         from shapely.geometry import shape
         boundary_polygon = shape(geojson_geometry)
 
-        # 基本Feature（境界）を作成
+
+        # ==================== STEP 4: GeoJSON Feature作成 ====================
+
         features = [{
             "type": "Feature",
             "geometry": geojson_geometry,
@@ -564,7 +601,8 @@ if __name__ == '__main__':
             }
         }]
 
-        # 等高線レベルの解析
+        # ==================== STEP 5: 等高線・水深ポリゴン生成（オプション） ====================
+
         contour_levels = None
         if args.contour_levels:
             try:
@@ -606,7 +644,8 @@ if __name__ == '__main__':
         else:
             logger.info("等高線と水深ポリゴンの生成をスキップしました")
 
-        # GeoJSON作成
+        # ==================== STEP 6: GeoJSON出力 ====================
+
         geojson = {
             "type": "FeatureCollection",
             "features": features
@@ -616,7 +655,8 @@ if __name__ == '__main__':
         with open(output_file_path, 'w', encoding='utf-8') as f:
             json.dump(geojson, f, ensure_ascii=False, indent=2)
 
-        # 結果サマリー
+        # ==================== 結果サマリー ====================
+
         logger.info("=" * 60)
         logger.info("生成完了")
         logger.info("=" * 60)
