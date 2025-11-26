@@ -1,6 +1,6 @@
 /**
- * GeoJSONベースの地図表示アプリケーション
- * ズームレベルに応じてマーカーとポリゴンを切り替えて表示
+ * GeoJSON形式のポリゴン領域をLeafletで地図上に表示します
+ * ズームレベルに応じてポリゴンとマーカーを切り替えて表示します
  *
  * @class Main
  * @example
@@ -21,7 +21,7 @@ export class Main {
     defaultLat: 35.6812,      // 東京駅の緯度
     defaultLon: 139.7671,     // 東京駅の経度
     defaultZoom: 13,
-    zoomThreshold: 11,        // マーカー/ポリゴン切り替え閾値
+    zoomThreshold: 11,        // ポリゴン/マーカー切り替え閾値
     geojsonUrls: ['./data/ALL_depth_map_data_202510.geojson']
   };
 
@@ -76,7 +76,7 @@ export class Main {
    * @param {number} [params.defaultLat] - デフォルト緯度
    * @param {number} [params.defaultLon] - デフォルト経度
    * @param {number} [params.defaultZoom] - デフォルトズームレベル
-   * @param {number} [params.zoomThreshold] - マーカー/ポリゴン切り替え閾値
+   * @param {number} [params.zoomThreshold] - ポリゴン/マーカー切り替え閾値
    * @param {Array<string>} [params.geojsonUrls] - GeoJSONファイルのURLリスト
    */
   constructor(params = {}) {
@@ -95,6 +95,36 @@ export class Main {
       contours: [],        // 等高線
       markers: []          // マーカー
     };
+  }
+
+
+  /**
+   * 3D可視化ページへのナビゲーション処理
+   *
+   * @param {string} link - 遷移先のURL
+   * @param {Object} properties - GeoJSONのプロパティオブジェクト
+   * @param {string} properties.name - エリア名
+   * @param {number} properties.center_lat - 中心緯度
+   * @param {number} properties.center_lon - 中心経度
+   * @private
+   */
+  navigateToVisualization(link, properties) {
+    const { name, center_lat, center_lon } = properties;
+
+    // 座標が無効な場合は遷移しない
+    if (center_lat === undefined || center_lon === undefined ||
+        center_lat === null || center_lon === null) {
+      console.warn('Invalid coordinates, navigation cancelled');
+      return;
+    }
+
+    const params = new URLSearchParams({
+      name: name || '',
+      lat: center_lat,
+      lon: center_lon
+    });
+
+    window.location.href = `${link || './index-bathymetric-data-dev.html'}?${params}`;
   }
 
 
@@ -133,14 +163,15 @@ export class Main {
     const markers = [];
 
     data.features.forEach(feature => {
-      // 境界Featureのみ処理（水深ポリゴンや等高線は除外）
+      // 境界Featureのみ処理
       if (feature.properties?.type !== 'boundary') {
         return;
       }
 
       const { center_lat, center_lon, name, link } = feature.properties;
 
-      if (!center_lat || !center_lon) {
+      // 中心座標がない場合は配置する場所が不明なので処理をスキップ
+      if (center_lat === undefined || center_lon === undefined || center_lat === null || center_lon === null) {
         return;
       }
 
@@ -163,7 +194,7 @@ export class Main {
 
       // クリックイベント
       marker.on('click', () => {
-        window.location.href = link || './index-bathymetric-data-dev.html';
+        this.navigateToVisualization(link, feature.properties);
       });
 
       // ツールチップ
@@ -172,8 +203,10 @@ export class Main {
         `<strong>${displayName}</strong><br>Click to open 3D visualization page`;
 
       marker.bindTooltip(tooltipContent, {
-        direction: 'top',
-        offset: [0, -40],
+        sticky: false,
+        direction: 'top',  // 表示位置を上に固定
+        offset: [0, -10],   // 上に移動
+        opacity: 0.95,
         className: 'custom-tooltip'
       });
 
@@ -208,20 +241,23 @@ export class Main {
       onEachFeature: (feature, layer) => {
         const { name, description, link } = feature.properties;
 
+        // クリックイベント
         layer.on('click', () => {
-          window.location.href = link || './index-bathymetric-data-dev.html';
+          this.navigateToVisualization(link, feature.properties);
         });
 
         const tooltipContent = this.isJapanese ?
           `<strong>${name || '名前なし'}</strong><br>
-           ${description || ''}<br>
-           <em>クリックで3次元可視化ページを開きます</em>` :
+          ${description || ''}<br>
+          <em>クリックで3次元可視化ページを開きます</em>` :
           `<strong>${name || 'No name'}</strong><br>
-           ${description || ''}<br>
-           <em>Click to open 3D visualization page</em>`;
+          ${description || ''}<br>
+          <em>Click to open 3D visualization page</em>`;
 
         layer.bindTooltip(tooltipContent, {
           sticky: true,
+          direction: 'top',  // 表示位置を上に固定
+          offset: [0, -20],  // 上に移動
           opacity: 0.95,
           className: 'custom-tooltip'
         });
@@ -297,8 +333,10 @@ export class Main {
         };
       },
       onEachFeature: (feature, layer) => {
+
+        // クリックイベント
         layer.on('click', () => {
-          window.location.href = boundaryLink;
+          this.navigateToVisualization(boundaryLink, boundaryFeature.properties);
         });
 
         const { depth, depth_min, depth_max } = feature.properties;
@@ -314,6 +352,8 @@ export class Main {
 
         layer.bindTooltip(tooltipContent, {
           sticky: true,
+          direction: 'top',  // 表示位置を上に固定
+          offset: [0, -20],  // 上に移動
           opacity: 0.95,
           className: 'custom-tooltip'
         });

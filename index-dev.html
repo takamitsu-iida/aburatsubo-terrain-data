@@ -38,29 +38,53 @@
       height: 100vh;
     }
 
-    canvas {
-      display: block;
+    /* ==============================================
+      Leaflet カスタムスタイル
+      ============================================== */
+
+    /* ----- 基本設定 ----- */
+    .leaflet-container {
+      font-family: "Helvetica Neue", Arial, "Hiragino Kaku Gothic ProN", "Hiragino Sans", Meiryo, sans-serif;
     }
 
+    /* ----- インタラクティブ要素 ----- */
     .leaflet-interactive {
       cursor: pointer;
+      transition: opacity 0.2s ease;
     }
 
-    .area-marker {
-      background-color: #3388ff;
-      border: 2px solid white;
-      border-radius: 50%;
-      width: 30px;
-      height: 30px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-weight: bold;
-      color: white;
-      box-shadow: 0 2px 5px rgba(0,0,0,0.3);
-      cursor: pointer;
+    .leaflet-interactive:hover {
+      opacity: 0.8;
     }
 
+    /* ----- クレジット表示 ----- */
+    .leaflet-control-attribution {
+      font-size: 11px !important;
+      padding: 0 5px !important;
+      background: rgba(255, 255, 255, 0.9) !important;
+      line-height: 1.4 !important;
+      min-height: 20px !important;
+      border-radius: 4px 0 0 0 !important;
+      box-shadow: 0 1px 5px rgba(0, 0, 0, 0.2) !important;
+    }
+
+    .leaflet-control-attribution a {
+      color: #0078A8 !important;
+      text-decoration: none !important;
+      font-weight: 500 !important;
+    }
+
+    .leaflet-control-attribution a:hover {
+      text-decoration: underline !important;
+      color: #005a80 !important;
+    }
+
+    .leaflet-control-attribution a:focus {
+      outline: 2px solid #0078A8 !important;
+      outline-offset: 2px !important;
+    }
+
+    /* ----- エリアラベル (マーカー用) ----- */
     .area-label {
       background: none;
       border: none;
@@ -72,48 +96,178 @@
     .area-label-pin {
       font-size: 3em;
       line-height: 1;
-      filter: drop-shadow(2px 2px 4px rgba(0,0,0,0.5));
+      filter: drop-shadow(2px 2px 4px rgba(0, 0, 0, 0.5));
+      transition: filter 0.2s ease;
+    }
+
+    .area-label:hover .area-label-pin {
+      filter: drop-shadow(3px 3px 6px rgba(0, 0, 0, 0.7));
     }
 
     .area-label-text {
       font-weight: bold;
       color: #3388ff;
-      background-color: rgba(255, 255, 255, 0.9);
-      padding: 4px 12px;
+      background-color: rgba(255, 255, 255, 0.95);
+      padding: 6px 14px;
       border-radius: 4px;
       font-size: 1.4em;
       white-space: nowrap;
-      box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+      box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);
       margin-top: 4px;
       display: inline-block;
+      transition: background-color 0.2s ease, transform 0.2s ease;
+      border: 1px solid rgba(51, 136, 255, 0.3);
     }
 
-    /* ツールチップとポップアップのスタイルをカスタマイズ */
+    .area-label:hover .area-label-text {
+      background-color: rgba(51, 136, 255, 0.1);
+      transform: translateY(-2px);
+      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.4);
+    }
+
+    /* ----- ツールチップ ----- */
     .leaflet-tooltip {
-      font-size: 1.6em !important;
+      font-size: 14px !important;
       padding: 10px 15px !important;
       line-height: 1.6 !important;
-      background-color: rgba(255, 255, 255, 0.95) !important;
+      background-color: rgba(255, 255, 255, 0.97) !important;
       border: 2px solid #3388ff !important;
       border-radius: 6px !important;
-      box-shadow: 0 3px 10px rgba(0,0,0,0.3) !important;
+      box-shadow: 0 3px 10px rgba(0, 0, 0, 0.3) !important;
+      pointer-events: none !important;
+      white-space: normal !important;
+      max-width: 300px !important;
+      min-width: 150px !important;
     }
 
-    .leaflet-popup-content-wrapper {
-      font-size: 1.6em !important;
-      padding: 5px !important;
-    }
-
-    .leaflet-popup-content {
-      margin: 15px 20px !important;
-      line-height: 1.6 !important;
-    }
-
-    .leaflet-popup-content strong {
-      font-size: 1.2em !important;
+    .leaflet-tooltip strong {
+      color: #3388ff !important;
+      font-size: 16px !important;
       display: block;
-      margin-bottom: 8px;
+      margin-bottom: 4px;
     }
+
+    .leaflet-tooltip em {
+      color: #666 !important;
+      font-size: 12px !important;
+      display: block;
+      margin-top: 4px;
+    }
+
+    .leaflet-tooltip br + * {
+      margin-top: 4px;
+    }
+
+    /* ツールチップの矢印 */
+    .leaflet-tooltip-top:before {
+      border-top-color: #3388ff !important;
+    }
+
+    .leaflet-tooltip-bottom:before {
+      border-bottom-color: #3388ff !important;
+    }
+
+    .leaflet-tooltip-left:before {
+      border-left-color: #3388ff !important;
+    }
+
+    .leaflet-tooltip-right:before {
+      border-right-color: #3388ff !important;
+    }
+
+    /* ----- ズームコントロール ----- */
+    .leaflet-control-zoom a {
+      transition: background-color 0.2s ease !important;
+    }
+
+    .leaflet-control-zoom a:hover {
+      background-color: #f0f0f0 !important;
+    }
+
+    .leaflet-control-zoom a:focus {
+      outline: 2px solid #3388ff !important;
+      outline-offset: 2px !important;
+    }
+
+    /* ----- レスポンシブ対応 ----- */
+    @media (max-width: 768px) {
+      .leaflet-control-attribution {
+        font-size: 10px !important;
+        max-width: 90% !important;
+        padding: 2px 4px !important;
+      }
+
+      .area-label-text {
+        font-size: 1.2em;
+        padding: 4px 10px;
+      }
+
+      .area-label-pin {
+        font-size: 2.5em;
+      }
+
+      .leaflet-tooltip {
+        font-size: 13px !important;
+        padding: 8px 12px !important;
+        max-width: 250px !important;
+        min-width: 120px !important;
+      }
+
+      .leaflet-tooltip strong {
+        font-size: 15px !important;
+      }
+
+      .leaflet-tooltip em {
+        font-size: 11px !important;
+      }
+    }
+
+    @media (max-width: 480px) {
+      .leaflet-control-attribution {
+        font-size: 9px !important;
+      }
+
+      .area-label-text {
+        font-size: 1.1em;
+        padding: 3px 8px;
+      }
+
+      .leaflet-tooltip {
+        font-size: 12px !important;
+        max-width: 200px !important;
+        min-width: 100px !important;
+      }
+
+      .leaflet-tooltip strong {
+        font-size: 14px !important;
+      }
+
+      .leaflet-tooltip em {
+        font-size: 10px !important;
+      }
+    }
+
+    /* ----- アクセシビリティ: フォーカスインジケータ ----- */
+    *:focus-visible {
+      outline: 2px solid #3388ff !important;
+      outline-offset: 2px !important;
+    }
+
+    /* ----- ダークモード対応 ----- */
+    @media (prefers-color-scheme: dark) {
+      .area-label-text {
+        background-color: rgba(30, 30, 30, 0.95);
+        color: #5ab4ff;
+        border-color: rgba(90, 180, 255, 0.3);
+      }
+
+      .leaflet-tooltip {
+        background-color: rgba(30, 30, 30, 0.97) !important;
+        border-color: #5ab4ff !important;
+        color: #e0e0e0 !important;
+      }
+    }
+
   </style>
 
 </head>
