@@ -14,8 +14,6 @@
 
 [加工前のCSV](https://takamitsu-iida.github.io/aburatsubo-terrain-data/data/ALL_depth_map_data_202510.csv)
 
-[加工後のCSV](https://takamitsu-iida.github.io/aburatsubo-terrain-data/data/ALL_depth_map_data_202510_de_dd_ol_ip_mf.csv)
-
 <br>
 
 |       |            lat |             lon |        depth |            epoch |
@@ -45,8 +43,6 @@ Deeperのサブスクリプション会員になると3Dでマップが表示さ
 契約していませんので、可視化ツールを自作しました。
 
 油壷専用です。
-
-[Live Demo](https://takamitsu-iida.github.io/aburatsubo-terrain-data/index-bathymetric-data.html)
 
 [Live Demo (開発中)](https://takamitsu-iida.github.io/aburatsubo-terrain-data/index-dev.html)
 
